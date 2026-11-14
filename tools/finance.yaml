@@ -1,0 +1,116 @@
+# Catalogue d'outils du département Finance.
+# mode : read (lecture seule) ou write (modifie des données ou crée un document)
+# departments : départements autorisés à utiliser l'outil
+
+- name: query_invoices
+  description: "Search supplier invoices. Returns the matching invoices with identifier, vendor, amount in TND, status and due date. Use the filters to keep the result small."
+  mode: read
+  departments: [finance]
+  parameters:
+    - {name: status, type: string, required: false, enum: [pending, approved, rejected, paid], description: "Filter on the invoice status."}
+    - {name: vendor_id, type: string, required: false, description: "Filter on the vendor identifier, for example V-00123."}
+    - {name: date_from, type: string, required: false, description: "Earliest invoice date, format YYYY-MM-DD."}
+    - {name: date_to, type: string, required: false, description: "Latest invoice date, format YYYY-MM-DD."}
+    - {name: min_amount_tnd, type: number, required: false, description: "Only invoices with an amount greater than or equal to this value, in TND."}
+    - {name: limit, type: integer, required: false, description: "Maximum number of rows returned, default 20, maximum 100."}
+
+- name: get_invoice
+  description: "Get the full detail of one invoice: header, lines, tax amounts, purchase order reference and approval history."
+  mode: read
+  departments: [finance]
+  parameters:
+    - {name: invoice_id, type: string, required: true, description: "Invoice identifier, for example INV-2026-00457."}
+    - {name: include_lines, type: boolean, required: false, description: "Include the invoice lines, default false."}
+
+- name: get_vendor
+  description: "Get a vendor record: legal name, tax id, status (active, blocked or pending), payment terms, masked bank details and block reason if any. Provide vendor_id or tax_id."
+  mode: read
+  departments: [finance, inventory]
+  parameters:
+    - {name: vendor_id, type: string, required: false, description: "Vendor identifier, for example V-00123."}
+    - {name: tax_id, type: string, required: false, description: "Vendor tax identification number."}
+
+- name: update_invoice_status
+  description: "Approve or reject a pending invoice. The decision is recorded with the approver and the reason, and cannot be undone without a new review."
+  mode: write
+  departments: [finance]
+  parameters:
+    - {name: invoice_id, type: string, required: true, description: "Invoice identifier."}
+    - {name: new_status, type: string, required: true, enum: [approved, rejected], description: "Decision to record."}
+    - {name: reason, type: string, required: true, description: "Short justification kept in the approval history."}
+    - {name: approver_id, type: string, required: true, description: "Identifier of the person who approves the decision."}
+
+- name: query_payments
+  description: "List incoming or outgoing payments, scheduled or executed, for a period. Returns date, counterparty, amount in TND, status and linked invoice."
+  mode: read
+  departments: [finance]
+  parameters:
+    - {name: direction, type: string, required: false, enum: [incoming, outgoing], description: "Payment direction."}
+    - {name: status, type: string, required: false, enum: [scheduled, executed, failed], description: "Payment status."}
+    - {name: date_from, type: string, required: false, description: "Start of the period, format YYYY-MM-DD."}
+    - {name: date_to, type: string, required: false, description: "End of the period, format YYYY-MM-DD."}
+    - {name: bank_account_id, type: string, required: false, description: "Restrict to one bank account."}
+    - {name: limit, type: integer, required: false, description: "Maximum number of rows returned, default 50."}
+
+- name: create_payment_order
+  description: "Create a payment order for an approved invoice. The order is queued for execution and cannot be edited afterwards."
+  mode: write
+  departments: [finance]
+  parameters:
+    - {name: invoice_id, type: string, required: true, description: "Approved invoice to pay."}
+    - {name: amount_tnd, type: number, required: true, description: "Amount to pay in TND, three decimals."}
+    - {name: execution_date, type: string, required: true, description: "Requested execution date, format YYYY-MM-DD."}
+    - {name: bank_account_id, type: string, required: true, description: "Bank account to debit."}
+
+- name: get_bank_balance
+  description: "Get the balance of one bank account at a given date, with the available amount and the amount reserved for scheduled payments."
+  mode: read
+  departments: [finance]
+  parameters:
+    - {name: account_id, type: string, required: true, description: "Bank account identifier."}
+    - {name: as_of_date, type: string, required: false, description: "Balance date, format YYYY-MM-DD, default today."}
+
+- name: query_bank_transactions
+  description: "List the transactions of one bank account for a period, with date, label, amount in TND, direction and reconciliation status."
+  mode: read
+  departments: [finance]
+  parameters:
+    - {name: account_id, type: string, required: true, description: "Bank account identifier."}
+    - {name: date_from, type: string, required: false, description: "Start of the period, format YYYY-MM-DD."}
+    - {name: date_to, type: string, required: false, description: "End of the period, format YYYY-MM-DD."}
+    - {name: direction, type: string, required: false, enum: [debit, credit], description: "Keep only debits or only credits."}
+    - {name: min_amount_tnd, type: number, required: false, description: "Only transactions above this amount in TND."}
+    - {name: limit, type: integer, required: false, description: "Maximum number of rows returned, default 50."}
+
+- name: get_exchange_rate
+  description: "Get the exchange rate of a foreign currency against the Tunisian dinar at a given date, using the official central bank rate."
+  mode: read
+  departments: [finance]
+  parameters:
+    - {name: currency, type: string, required: true, description: "ISO 4217 currency code, for example EUR or USD."}
+    - {name: date, type: string, required: false, description: "Rate date, format YYYY-MM-DD, default today."}
+
+- name: match_invoice_to_po
+  description: "Compare an invoice with its purchase order and goods receipt (three-way matching). Returns the differences in quantity, unit price and total, and whether they stay within the tolerance."
+  mode: read
+  departments: [finance]
+  parameters:
+    - {name: invoice_id, type: string, required: true, description: "Invoice to check."}
+    - {name: tolerance_pct, type: number, required: false, description: "Accepted difference in percent, default 2."}
+
+- name: get_budget_status
+  description: "Get the budget status of a cost center: allocated amount, committed amount, spent amount and remaining amount in TND for a fiscal year."
+  mode: read
+  departments: [finance]
+  parameters:
+    - {name: cost_center, type: string, required: true, description: "Cost center code, for example CC-210."}
+    - {name: fiscal_year, type: integer, required: false, description: "Fiscal year, default current year."}
+
+- name: generate_finance_report
+  description: "Generate a finance report file and return its download reference. Aging report, cash position or vendor spend."
+  mode: write
+  departments: [finance]
+  parameters:
+    - {name: report_type, type: string, required: true, enum: [aging, cash_position, vendor_spend], description: "Kind of report."}
+    - {name: period, type: string, required: true, description: "Month covered, format YYYY-MM."}
+    - {name: output_format, type: string, required: false, enum: [pdf, csv], description: "File format, default pdf."}
