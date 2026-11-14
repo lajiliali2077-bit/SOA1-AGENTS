@@ -24,3 +24,11 @@ New-Item -ItemType Directory -Force docs | Out-Null
 - Trois conflits volontaires pour tester la précédence et le benchmark : seuil d'approbation Finance (10000 TND) surchargé à 5000 en Accounts-Payable, seuil de réapprovisionnement Inventory (100) surchargé à 50 en Warehouse, période de revue Compliance (90 jours) surchargée à 180 en Audit.
 - Écarts avec l'énoncé : la spécification SKILL.md n'a pas de champ trigger, le déclencheur est la phrase Use when dans la description. allowed-tools est expérimental et se présente comme une chaîne séparée par des espaces. Les skills Compliance sont tous en lecture seule, ce qui servira de cas de test pour les permissions d'outils.
 - Application Django registry créée et enregistrée dans INSTALLED_APPS, prête pour le parser et les modèles.
+
+## Incrément 5 : parser SKILL.md
+- Module registry/parser.py : sépare le frontmatter du corps, valide avec un modèle Pydantic v2 les champs de la spécification Agent Skills (name, description, allowed-tools, plus les champs optionnels), et refuse tout champ inconnu.
+- Règles vérifiées dans la spécification : name en minuscules, chiffres et tirets (sans tiret au début, à la fin ni doublé), identique au nom du dossier ; description de 1 à 1024 caractères ; allowed-tools est une chaîne séparée par des espaces, que le parser transforme en liste.
+- Règle propre au projet : une description sans Use when donne un avertissement, car la spécification dit seulement qu'elle devrait décrire quand utiliser le skill.
+- Mesure avec tiktoken (estimation, pas le tokenizer de Gemini) : 12 skills valides, index de niveau 1 de 366 tokens, corps de niveau 2 de 452 tokens au total. L'écart est faible parce que nos corps sont très courts.
+- Point à trancher avant le benchmark : enrichir le corpus (corps plus longs, fichiers references/ pour le niveau 3, définitions d'outils), sinon la progressive disclosure montrera peu de gain.
+- 11 tests unitaires (cas valides et invalides, fins de ligne Windows, et validation des 12 skills réels) lancés avec python manage.py test registry.
