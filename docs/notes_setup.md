@@ -32,3 +32,9 @@ New-Item -ItemType Directory -Force docs | Out-Null
 - Mesure avec tiktoken (estimation, pas le tokenizer de Gemini) : 12 skills valides, index de niveau 1 de 366 tokens, corps de niveau 2 de 452 tokens au total. L'écart est faible parce que nos corps sont très courts.
 - Point à trancher avant le benchmark : enrichir le corpus (corps plus longs, fichiers references/ pour le niveau 3, définitions d'outils), sinon la progressive disclosure montrera peu de gain.
 - 11 tests unitaires (cas valides et invalides, fins de ligne Windows, et validation des 12 skills réels) lancés avec python manage.py test registry.
+
+## Incrément 6 : corpus enrichi, catalogue d'outils et gabarit Finance
+- Constat : le corpus de départ était minuscule (index 366 tokens, corps 452), donc la progressive disclosure n'aurait montré aucun gain. Nous avons enrichi Finance (AGENTS.md aux 3 niveaux, corps de skills, fichiers references/ de niveau 3) et créé un catalogue de 12 outils dans tools/finance.yaml.
+- Choix : les définitions d'outils sont séparées des skills, car la spécification SKILL.md ne connaît que les noms d'outils dans allowed-tools. Chaque outil porte un mode read ou write et la liste des départements autorisés, ce qui servira aux permissions.
+- Mesure : Finance pèse 6554 tokens (4510 de Markdown et 2044 d'outils) et le corpus 8187 tokens. L'estimation initiale de 8000 à 10000 par département était trop haute, la cible révisée est d'environ 6500, soit environ 26500 pour 4 départements (extrapolation, à confirmer).
+- Organisation : Finance sert de gabarit, HR, Inventory et Compliance seront enrichis par les autres membres avec docs/GUIDE_DEPARTEMENT.md. Scripts de mesure : measure_corpus.py et measure_dept.py.

@@ -57,3 +57,18 @@ for category in ORDER:
     total += sum(values)
     print(f"{category:<36}{len(values):>9}{sum(values):>9}{sum(values) // len(values):>9}")
 print(f"{'TOTAL (prompt monolithique)':<36}{'':>9}{total:>9}")
+
+# ---- Détail par département (AGENTS.md, SKILL.md, references/ et outils) ----
+by_dept: dict[str, int] = {}
+for path in sorted(departments.rglob("*.md")):
+    dept = path.relative_to(departments).parts[0]
+    by_dept[dept] = by_dept.get(dept, 0) + count_tokens(read(path))
+for path in sorted((ROOT / "tools").glob("*.yaml")):
+    tools = yaml.safe_load(read(path)) or []
+    tokens = sum(count_tokens(json.dumps(t, ensure_ascii=False)) for t in tools)
+    by_dept[path.stem] = by_dept.get(path.stem, 0) + tokens
+    
+print()
+print(f"{'Département (hors AGENTS.md global)':<36}{'tokens':>9}")
+for dept, tokens in sorted(by_dept.items()):
+    print(f"{dept:<36}{tokens:>9}")
