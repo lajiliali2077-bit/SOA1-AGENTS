@@ -1,0 +1,34 @@
+# Catalogue d'outils du département Compliance (version minimale, à compléter par l'équipe).
+# Version minimale : seuls des outils de lecture sont définis pour l'instant. Un outil d'écriture peut être ajouté avec mode: write.
+
+- name: query_audit_log
+  description: "Search the audit log. Returns date, user, action, entity type, entity identifier and the previous and new values of the changed fields."
+  mode: read
+  departments: [compliance]
+  parameters:
+    - {name: entity_type, type: string, required: false, description: "Kind of record, for example invoice, vendor, employee or stock_line."}
+    - {name: entity_id, type: string, required: false, description: "Identifier of the record."}
+    - {name: user_id, type: string, required: false, description: "Identifier of the user who made the change."}
+    - {name: action, type: string, required: false, enum: [create, update, delete, approve, login], description: "Kind of action."}
+    - {name: date_from, type: string, required: false, description: "Start of the period, format YYYY-MM-DD."}
+    - {name: date_to, type: string, required: false, description: "End of the period, format YYYY-MM-DD."}
+    - {name: limit, type: integer, required: false, description: "Maximum number of entries returned, default 50, maximum 200."}
+
+- name: get_findings
+  description: "List audit findings with identifier, title, severity, status, owner, due date and the records they refer to."
+  mode: read
+  departments: [compliance]
+  parameters:
+    - {name: severity, type: string, required: false, enum: [low, medium, high], description: "Filter on the severity."}
+    - {name: status, type: string, required: false, enum: [open, in_progress, closed], description: "Filter on the status."}
+    - {name: audit_id, type: string, required: false, description: "Restrict to one audit, for example AUD-2026-03."}
+    - {name: limit, type: integer, required: false, description: "Maximum number of findings returned, default 50."}
+
+- name: scan_text
+  description: "Scan a text for personal data. Returns the type, the position and a masked value of each match, and optionally the masked text. The original values are never returned."
+  mode: read
+  departments: [compliance]
+  parameters:
+    - {name: text, type: string, required: true, description: "Text to scan."}
+    - {name: entity_types, type: string, required: false, description: "Comma-separated types to look for among email, phone, national_id and iban. Default all."}
+    - {name: return_masked_text, type: boolean, required: false, description: "Also return the text with every match masked, default true."}

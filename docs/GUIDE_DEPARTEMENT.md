@@ -44,7 +44,7 @@ Ne modifiez que votre département et votre fichier d'outils. Le `AGENTS.md` rac
 ## 6. Catalogue d'outils
 Modèle : `tools/finance.yaml`. Chaque outil a `name`, `description`, `mode` (`read` ou `write`), `departments` (départements autorisés) et `parameters`.
 - Un outil partagé est défini **une seule fois**, dans le fichier du département propriétaire (exemple : `get_vendor` dans `finance.yaml`, avec `departments: [finance, inventory]`). Ne le redéfinissez pas.
-- Compliance : tous les outils sont en lecture seule (`mode: read`).
+- Tout département peut définir des outils d'écriture (`mode:write`) Un skill qui en déclare un est marqué needs_review (validation humaine requise), il n'est pas refusé.
 - Les noms doivent correspondre exactement à ceux de `allowed-tools`.
 - La validation automatique du catalogue sera ajoutée plus tard (incrément 7) : respectez le format dès maintenant.
 

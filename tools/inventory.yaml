@@ -1,0 +1,20 @@
+# Catalogue d'outils du département Inventory (version minimale, à compléter par l'équipe).
+# get_vendor est défini dans tools/finance.yaml (outil partagé avec Finance).
+
+- name: query_stock
+  description: "Get stock lines by item and storage location: item code, label, quantity in units, location code, reorder threshold and last movement date."
+  mode: read
+  departments: [inventory]
+  parameters:
+    - {name: item_code, type: string, required: false, description: "Item code, for example SKU-10458."}
+    - {name: location_code, type: string, required: false, description: "Storage location code, for example WH1-A-03."}
+    - {name: below_threshold, type: boolean, required: false, description: "Only lines whose quantity is under the reorder threshold, default false."}
+    - {name: limit, type: integer, required: false, description: "Maximum number of lines returned, default 50, maximum 200."}
+
+- name: get_purchase_order
+  description: "Get one purchase order: vendor, status, order date, expected delivery date, total in TND, number of quotes attached and optionally the lines."
+  mode: read
+  departments: [inventory]
+  parameters:
+    - {name: po_id, type: string, required: true, description: "Purchase order identifier, for example PO-2026-00312."}
+    - {name: include_lines, type: boolean, required: false, description: "Include the order lines, default false."}
