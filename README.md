@@ -72,4 +72,4 @@ Pour enrichir un département, lisez `docs/GUIDE_DEPARTEMENT.md` et prenez `depa
 - Texte accentué illisible dans PowerShell : les fichiers sont en UTF-8 sans BOM, ouvrez-les dans VS Code.
 
 ## Avancement
-Registre (parser, validation, catalogue d'outils, indexeur) terminé. À venir : compilateur de contexte avec budget de tokens et observation masking, benchmark, webhooks GitHub/n8n, présentation. Répartition des rôles : à définir.
+Registre (parser, validation, catalogue d'outils, indexeur) terminé. À venir : compilateur de contexte avec budget de tokens et observation masking, benchmark, webhooks GitHub/n8n, présentation. Répartition des rôles : à définir.git clone https://github.com/lajiliali2077-bit/SOA1-AGENTS.git readme-test

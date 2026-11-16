@@ -1,0 +1,6 @@
+﻿
+## Plan final et décisions de conception
+- Vérifications faites sur l'API Gemini : usage_metadata renvoie cached_content_token_count, mais le seuil minimum du cache implicite (1024 à 4096 tokens selon le modèle et la source) dépasse sans doute notre préfixe stable d'environ 940 tokens. Nous mesurons donc la stabilité du préfixe nous-mêmes et publions le compteur Gemini tel quel. Les quotas gratuits ne sont pas publiés par modèle : à lire dans AI Studio avant le benchmark.
+- Architecture : 3 tiers de chargement (index, corps du skill, références et outils) distincts des 3 niveaux hiérarchiques d'AGENTS.md. Activation par appels de fonction, budget de 6000 tokens, masquage des anciennes sorties d'outils au-delà de 70 % du budget avec récupération possible, préfixe append-only testé automatiquement.
+- Moteur déterministe exigé par le DS1 : garde d'outils (permissions, arguments Pydantic, confirmation avant écriture) et vérificateur de règles en Python, sans LLM juge. Benchmark en deux volets : hors ligne reproductible et en ligne avec Gemini, résultats publiés tels quels.
+- Périmètre figé pour rester maîtrisé : 4 départements, 12 skills, environ 48 outils, 30 tâches, ni RAG ni multi-agents. Répartition : Role 1 code, Roles 2 à 4 un département chacun avec 7 tâches et un livrable de slides, Role 5 qualité, preuves et démonstration.
