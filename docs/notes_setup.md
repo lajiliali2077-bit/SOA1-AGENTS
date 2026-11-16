@@ -45,3 +45,10 @@ New-Item -ItemType Directory -Force docs | Out-Null
 - Choix : aucun département n'est en lecture seule. Chacun peut recevoir des outils d'écriture, qui donnent needs_review (validation humaine) sans refus. Cela corrige la remarque de l'incrément 4 qui parlait de skills Compliance en lecture seule : ce n'était qu'un état de départ.
 - Résultat sur le corpus actuel : 12 skills, 10 active, 2 needs_review (invoice-validation pour son outil d'écriture, finding-report pour un outil déclaré mais jamais cité). Règles propres au projet, pas de la spécification SKILL.md.
 - 29 tests unitaires environ (catalogue, validation, corpus réel) avec python manage.py test registry.
+
+## Incrément 8 : registre en base de données (indexeur et commande index_skills)
+- Trois modèles Django : AgentsFile (13 fichiers aux 3 niveaux), Skill (statut active ou needs_review, liste des problèmes en JSON, tokens d'index et de corps) et Tool (catalogue d'outils avec mode, propriétaire, départements autorisés et paramètres). Le registre est un index : la source de vérité reste departments/ et tools/.
+- Indexeur registry/indexer.py et commande python manage.py index_skills : relançable sans doublon (clé : chemin relatif du fichier, nom pour les outils), une seule transaction par exécution.
+- Choix de nuance : un catalogue d'outils invalide n'écrit rien en base, car les permissions en dépendent. Un skill rejeté est exclu du registre (et supprimé s'il y était), les autres sont indexés, et la commande se termine en échec pour que l'auteur voie son erreur. Un skill needs_review est indexé avec ses avertissements.
+- Contrôle croisé : les sommes de tokens lues dans PostgreSQL (index 409, corps 1732, outils 3631, AGENTS.md 530, 595 et 912) correspondent à celles des scripts de mesure indépendants. L'écart initial de 10 tokens au niveau 2 venait d'un fichier Compliance modifié entre deux mesures.
+- Tests : le parser, la validation et l'indexeur sont testés sur des arborescences temporaires (relance, fichier modifié ou supprimé, skill devenu invalide, catalogue cassé sans écriture), plus un test sur le vrai corpus qui accepte l'ajout de skills par l'équipe.
