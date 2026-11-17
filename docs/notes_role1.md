@@ -45,3 +45,11 @@
 - Pourquoi : c'est la référence du benchmark. Le but est de mesurer les tokens économisés par la divulgation progressive. Le budget peut être dépassé : c'est ce qu'on veut montrer.
 - Choix : les références (Tier 3) ne sont pas chargées en monolithique (contrat), donc la comparaison est prudente. Les tiers sont les mêmes qu'en mode progressif pour comparer la composition.
 - Pas encore fait : observations, éviction (dont le 3e skill actif).
+
+## Incrément 10 : éviction sans masquage (17/11/2026)
+- Fait : un 3e skill actif désactive le plus ancien (corps, références, AGENTS.md devenus inutiles). Si le budget est dépassé, on décharge les références (la plus ancienne d'abord), puis on désactive le skill le plus ancien. Le Tier 1 et la conversation ne sont jamais évincés. evictions : "unloaded:<fichier>", "deactivated:<skill>" ; compacted vaut True. 14 tests dans test_eviction.py.
+- Pourquoi : l'éviction garde le contexte dans le budget sans jamais toucher à l'essentiel. Le budget peut rester dépassé si on ne peut plus rien retirer : on le dit au lieu de tricher.
+- Choix : la référence qu'on vient de charger est protégée pendant son événement. Le masquage des observations (Role 2) n'existe pas encore : un point d'accroche est prévu dans _enforce_budget.
+- Compromis assumé : retirer un bloc au milieu casse le préfixe KV-cache. C'est pourquoi l'éviction n'a lieu qu'en cas de besoin, et compacted le signale.
+- Pas encore fait : masquage des observations et événement "observation".
+- Le Role 2 devra livrer mask_observations avec la signature du contrat, et je la brancherai dans _enforce_budget.
