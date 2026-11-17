@@ -1,11 +1,18 @@
-"""Tests du compilateur (version 2). Ils créent leurs propres données de test."""
+"""Tests du compilateur (version 3). Ils créent leurs propres données de test."""
+
+import tempfile
+from pathlib import Path
+from unittest import mock
 
 from django.test import TestCase
 
 from registry.models import AgentsFile, Skill, Tool
 
+from . import core
 from .core import compile_context
 from .types import Event
+
+SKILL_DIR = "departments/finance/accounts-payable/skills/invoice-validation"
 
 
 class CompileContextTests(TestCase):
@@ -22,7 +29,7 @@ class CompileContextTests(TestCase):
             name="invoice-validation", description="Valide une facture fournisseur",
             allowed_tools=["get_invoice", "approve_invoice"],
             department="finance", subdomain="accounts-payable",
-            path="departments/finance/accounts-payable/skills/invoice-validation/SKILL.md",
+            path=f"{SKILL_DIR}/SKILL.md",
             body="corps du skill", meta_tokens=10, body_tokens=5,
         )
         Skill.objects.create(
@@ -43,6 +50,19 @@ class CompileContextTests(TestCase):
             Tool.objects.create(name=name, description="outil de test", mode="read",
                                 owner="finance", departments=["finance"], parameters=[],
                                 tokens=tokens)
+
+        # Faux dépôt dans un dossier temporaire, supprimé à la fin de chaque test.
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        skill_folder = Path(tmp.name) / SKILL_DIR
+        (skill_folder / "references").mkdir(parents=True)
+        # Fins de ligne Windows écrites exprès pour tester la normalisation.
+        (skill_folder / "references" / "approval_matrix.md").write_bytes(
+            "Seuil 500\r\nSeuil 5000".encode("utf-8"))
+        (skill_folder / "secret.txt").write_text("SECRET", encoding="utf-8")  # hors de references/
+        patcher = mock.patch.object(core, "REPO_ROOT", Path(tmp.name))
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def test_tier1_sans_evenement(self):
         result = compile_context([])
@@ -80,12 +100,10 @@ class CompileContextTests(TestCase):
 
     def test_evenement_pas_encore_implemente(self):
         with self.assertRaises(NotImplementedError):
-            compile_context([Event(kind="load_reference", skill="invoice-validation",
-                                   filename="approval_matrix.md")])
+            compile_context([Event(kind="observation", tool="get_invoice",
+                                   text="sortie", obs_id="obs-0001")])
 
-    def test_mode_monolithique_pas_encore_implemente(self):
-        with self.assertRaises(NotImplementedError):
-            compile_context([], mode="monolithic")
+    
 
     # ----- Incrément 7 : activation d'un skill (Tier 2) -----
 
@@ -165,3 +183,67 @@ class CompileContextTests(TestCase):
         events = [Event(kind="user", text="Bonjour"),
                   Event(kind="activate_skill", skill="invoice-validation")]
         self.assertEqual(compile_context(events).text, compile_context(events).text)
+
+    # ----- Incrément 8 : chargement d'une référence (Tier 3) -----
+
+    def test_reference_ajoutee_a_la_fin(self):
+        events = [Event(kind="activate_skill", skill="invoice-validation"),
+                  Event(kind="load_reference", skill="invoice-validation",
+                        filename="approval_matrix.md")]
+        result = compile_context(events)
+        last = result.items[-1]
+        self.assertEqual((last.tier, last.kind), (3, "reference"))
+        self.assertEqual(last.source, f"{SKILL_DIR}/references/approval_matrix.md")
+        self.assertGreater(last.tokens, 0)
+        self.assertIn("Seuil 5000", last.text)
+        self.assertLess(result.text.index("corps du skill"), result.text.index("Seuil 500"))
+        self.assertEqual(result.tokens, sum(i.tokens for i in result.items) + result.tool_tokens)
+
+    def test_reference_append_only(self):
+        events = [
+            Event(kind="user", text="Valide cette facture"),
+            Event(kind="activate_skill", skill="invoice-validation"),
+            Event(kind="load_reference", skill="invoice-validation", filename="approval_matrix.md"),
+            Event(kind="assistant", text="Je regarde"),
+        ]
+        previous = compile_context([]).text
+        for n in range(1, len(events) + 1):
+            current = compile_context(events[:n]).text
+            self.assertTrue(current.startswith(previous), f"préfixe cassé au tour {n}")
+            previous = current
+
+    def test_reference_deja_chargee_sans_effet(self):
+        load = Event(kind="load_reference", skill="invoice-validation", filename="approval_matrix.md")
+        activate = Event(kind="activate_skill", skill="invoice-validation")
+        once = compile_context([activate, load])
+        twice = compile_context([activate, load, load])
+        self.assertEqual(once.text, twice.text)
+
+    def test_reference_skill_non_actif(self):
+        with self.assertRaises(ValueError):
+            compile_context([Event(kind="load_reference", skill="invoice-validation",
+                                   filename="approval_matrix.md")])
+
+    def test_reference_introuvable(self):
+        events = [Event(kind="activate_skill", skill="invoice-validation"),
+                  Event(kind="load_reference", skill="invoice-validation", filename="absent.md")]
+        with self.assertRaises(ValueError):
+            compile_context(events)
+
+    def test_reference_sortie_du_dossier_refusee(self):
+        """Aucun nom de fichier ne doit permettre de lire hors du dossier references/."""
+        for bad in ["../SKILL.md", "..\\secret.txt", "../secret.txt", "../../secret.txt",
+                    "sous/dossier.md", "", ".."]:
+            with self.subTest(filename=bad):
+                events = [Event(kind="activate_skill", skill="invoice-validation"),
+                          Event(kind="load_reference", skill="invoice-validation", filename=bad)]
+                with self.assertRaises(ValueError):
+                    compile_context(events)
+
+    def test_reference_fins_de_ligne_normalisees(self):
+        events = [Event(kind="activate_skill", skill="invoice-validation"),
+                  Event(kind="load_reference", skill="invoice-validation",
+                        filename="approval_matrix.md")]
+        text = compile_context(events).items[-1].text
+        self.assertIn("Seuil 500\nSeuil 5000", text)
+        self.assertNotIn("\r", text)

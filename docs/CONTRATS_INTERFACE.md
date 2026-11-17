@@ -94,3 +94,14 @@ La signature du vérificateur de règles (IBAN masqué, montants, ligne « Skill
 - GET /api/skills/ : liste JSON (name, description, department, subdomain, status, allowed_tools, meta_tokens, body_tokens).
 - POST /api/compile/ : entrée {"events": [...], "budget": 6000, "mode": "progressive"}, sortie : CompileResult en JSON.
 - Boucle d'un tour : compile_context -> Gemini -> check_tool_call -> execute_tool -> record_observation -> nouvel Event "observation".
+
+
+## 7. Précisions décidées par le Role 1 (incréments 7 et 8)
+
+- activate_skill : trois items de tier 2 (AGENTS.md du département, AGENTS.md du sous-domaine, corps du skill ; kind "agents", "agents", "skill_body"). Réactiver un skill déjà actif n'ajoute rien. Un AGENTS.md déjà présent n'est jamais répété.
+- load_reference : un item de tier 3 (kind "reference"), source = chemin relatif du fichier. Le skill doit être actif, sinon ValueError. filename est un nom simple (ni "/" ni "\" ni ".."). Fichier déjà chargé : rien n'est ajouté. Lecture en UTF-8, fins de ligne normalisées.
+- 3e skill actif (à implémenter avec l'éviction) : le plus ancien est désactivé, evictions contient "deactivated:<skill>", compacted vaut True.
+- Tests du compilateur : python manage.py test compiler
+
+- mode="monolithic" : items tier 1 (AGENTS.md global) et tier 2 (autres AGENTS.md, puis corps de TOUS les skills), sans index ni références (Tier 3). allowed_tools = tous les outils, active_skills = tous les skills (exception à la règle des 2 maximum : Role 3 et Role 5, à confirmer). tool_tokens = tous les outils. Pas d'éviction : tokens peut dépasser budget, compacted vaut False. activate_skill et load_reference sont acceptés et ignorés (même liste d'événements rejouable dans les deux modes). Un mode inconnu lève ValueError.
+

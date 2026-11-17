@@ -39,3 +39,9 @@
 - Pourquoi : le plus spécifique est le plus proche de la fin, ce qui respecte la règle « le fichier le plus proche a priorité ». Réactiver un skill, ou un second skill du même sous-domaine, n'ajoute aucun doublon : le contexte reste append-only (test sur les 5 tours).
 - Pas encore fait : 3e skill actif (lève NotImplementedError, la désactivation viendra avec l'éviction), load_reference, observations, éviction, mode monolithique.
 - Choix : les tests se lancent avec « python manage.py test compiler » ; pytest n'est pas dans requirements.txt (configuration pytest à faire plus tard).
+
+## Incrément 9 : mode monolithique (17/11/2026)
+- Fait : compile_context(mode="monolithic") charge tous les AGENTS.md, tous les corps de skills et tous les outils, sans éviction. Même liste d'événements rejouable dans les deux modes. 32 tests.
+- Pourquoi : c'est la référence du benchmark. Le but est de mesurer les tokens économisés par la divulgation progressive. Le budget peut être dépassé : c'est ce qu'on veut montrer.
+- Choix : les références (Tier 3) ne sont pas chargées en monolithique (contrat), donc la comparaison est prudente. Les tiers sont les mêmes qu'en mode progressif pour comparer la composition.
+- Pas encore fait : observations, éviction (dont le 3e skill actif).
