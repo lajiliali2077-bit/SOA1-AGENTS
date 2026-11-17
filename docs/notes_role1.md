@@ -27,3 +27,15 @@
 - Fait : docs/CONTRATS_INTERFACE.md (brouillon) : types partagés, compile_context, et ce qui est attendu des Roles 2 à 5.
 - Pourquoi : les autres rôles sont bloqués tant que les noms de fonctions, entrées et sorties ne sont pas fixés.
 - Non vérifié : rien du contrat n'est encore implémenté ni testé ; les noms d'apps (compiler, masking, engine, sync, bench) sont des propositions à confirmer.
+
+## Incrément 6 : compilateur v1 (17/11/2026)
+- Fait : app compiler (types.py, core.py, test_core.py). compile_context construit le Tier 1 (AGENTS.md global + index des skills) et ajoute les messages user/assistant.
+- Pourquoi : fonction pure, blocs ajoutés à la fin séparés par une ligne vide, donc le texte du tour N est le début du texte du tour N+1 (test automatique, préfixe stable pour le cache KV).
+- Pas encore fait (lève NotImplementedError) : activation de skill, references, observations, éviction, mode monolithique.
+- Choix : l'app n'est pas ajoutée à INSTALLED_APPS (pas de modèle) : settings.py reste intact.
+
+## Incrément 7 : activation d'un skill, Tier 2 (17/11/2026)
+- Fait : l'événement activate_skill ajoute à la fin l'AGENTS.md du département, celui du sous-domaine, puis le corps du skill (tier 2). Remplit active_skills, allowed_tools et tool_tokens.
+- Pourquoi : le plus spécifique est le plus proche de la fin, ce qui respecte la règle « le fichier le plus proche a priorité ». Réactiver un skill, ou un second skill du même sous-domaine, n'ajoute aucun doublon : le contexte reste append-only (test sur les 5 tours).
+- Pas encore fait : 3e skill actif (lève NotImplementedError, la désactivation viendra avec l'éviction), load_reference, observations, éviction, mode monolithique.
+- Choix : les tests se lancent avec « python manage.py test compiler » ; pytest n'est pas dans requirements.txt (configuration pytest à faire plus tard).
