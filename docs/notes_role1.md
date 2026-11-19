@@ -53,3 +53,9 @@
 - Compromis assumé : retirer un bloc au milieu casse le préfixe KV-cache. C'est pourquoi l'éviction n'a lieu qu'en cas de besoin, et compacted le signale.
 - Pas encore fait : masquage des observations et événement "observation".
 - Le Role 2 devra livrer mask_observations avec la signature du contrat, et je la brancherai dans _enforce_budget.
+
+## Incrément 10 : compilateur utilisable par toute l'équipe (17/11/2026)
+- Fait : événement observation (sortie complète ajoutée à la fin), désactivation du plus ancien skill au 3e skill actif, conversion JSON (serialize.py) pour l'API, mode d'emploi pour les 4 autres rôles. 45 tests. Plus aucune erreur « pas encore implémenté » dans le compilateur.
+- Pourquoi : prioriser ce qui débloque les autres rôles (boucle du Role 5, garde du Role 3, masquage du Role 2) avant l'éviction par budget, qui ne bloque personne.
+- Choix : en désactivant un skill on garde ses AGENTS.md (l'autre skill actif peut en dépendre). Le contexte n'est plus un préfixe stable dans ce cas, d'où compacted=True (prévu par le contrat).
+- Pas encore fait : masquage des observations (dépend du Role 2), éviction par budget (références, puis skill), pytest.
