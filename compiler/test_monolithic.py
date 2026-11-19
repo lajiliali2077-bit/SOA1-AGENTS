@@ -99,7 +99,4 @@ class MonolithicModeTests(TestCase):
         self.assertEqual(compile_context(events, mode="monolithic").text,
                          compile_context(events, mode="monolithic").text)
 
-    def test_observation_pas_encore_implementee(self):
-        with self.assertRaises(NotImplementedError):
-            compile_context([Event(kind="observation", tool="get_invoice",
-                                   text="sortie", obs_id="obs-0001")], mode="monolithic")
+    

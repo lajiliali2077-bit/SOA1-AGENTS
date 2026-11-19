@@ -1,24 +1,16 @@
-"""Compilateur de contexte (version 5 : modes progressif et monolithique, avec éviction).
+"""Compilateur de contexte (version 5 : observations, désactivation du plus ancien skill).
 
 Principe : compile_context est une fonction PURE. Mêmes événements = même contexte.
 Elle lit la base du registre et, pour load_reference, un fichier du dépôt.
 Le texte est construit en ajoutant des blocs à la fin, séparés par une ligne vide,
-donc, tant qu'aucune éviction n'a eu lieu, le texte de n événements est toujours le début
-du texte de n+1 événements (préfixe stable, compatible avec le cache KV).
+donc le texte de n événements est le début du texte de n+1 événements (préfixe stable,
+compatible avec le cache KV), tant qu'aucune désactivation de skill n'a eu lieu.
 
 Deux modes :
-- "progressive" : Tier 1 au départ, puis Tier 2 et Tier 3 seulement au besoin,
-                  avec éviction quand le budget est dépassé.
-- "monolithic"  : tout est chargé au départ, sans éviction (sert de comparaison au benchmark).
+- "progressive" : Tier 1 au départ, puis Tier 2 et Tier 3 seulement au besoin.
+- "monolithic"  : tout est chargé au départ (sert de comparaison au benchmark).
 
-Éviction (mode progressif seulement). Le masquage des observations (Role 2) n'existe pas
-encore : il se branchera dans _enforce_budget, AVANT l'étape 1.
-- Un 3e skill actif désactive toujours le plus ancien (règle fixe, sans lien avec le budget).
-- Quand le total dépasse le budget, après chaque événement :
-    étape 1 : on décharge les références (Tier 3), la plus ancienne d'abord ;
-    étape 2 : on désactive le skill actif le plus ancien (jamais le plus récent).
-- Jamais évincés : Tier 1 (AGENTS.md global + index) et la conversation.
-- Si c'est encore trop gros après ça, le budget reste dépassé (on ne ment pas sur la taille).
+Pas encore fait : éviction par budget et masquage des observations (Role 2).
 """
 
 from pathlib import Path
@@ -30,7 +22,6 @@ from .types import CompileResult, ContextItem, Event
 
 SEPARATOR = "\n\n"
 CONVERSATION_PREFIXES = {"user": "Utilisateur : ", "assistant": "Assistant : "}
-NOT_IMPLEMENTED_KINDS = {"observation"}
 MAX_ACTIVE_SKILLS = 2
 MODES = ("progressive", "monolithic")
 
@@ -79,6 +70,18 @@ def _conversation_item(event: Event) -> ContextItem:
     return ContextItem(tier=0, kind=event.kind, text=text, tokens=count_tokens(text))
 
 
+def _observation_item(event: Event, seen_obs: set) -> ContextItem:
+    """Transforme une sortie d'outil en bloc complet (tier 0). Le masquage sera fait plus tard."""
+    if not event.tool or not event.obs_id:
+        raise ValueError("une observation doit avoir un outil (tool) et un identifiant (obs_id)")
+    if event.obs_id in seen_obs:
+        raise ValueError(f"observation déjà présente : '{event.obs_id}'")
+    seen_obs.add(event.obs_id)
+    text = f"Observation ({event.tool}, {event.obs_id}) :\n{event.text}"
+    return ContextItem(tier=0, kind="observation", text=text, tokens=count_tokens(text),
+                       source=event.obs_id)
+
+
 def _find_skill(name: str) -> Skill:
     """Cherche un skill par son nom. Erreur s'il n'existe pas ou si le nom est ambigu."""
     matches = list(Skill.objects.filter(name=name))
@@ -89,9 +92,16 @@ def _find_skill(name: str) -> Skill:
     return matches[0]
 
 
-def _agents_candidates(skill: Skill) -> list:
-    """Les AGENTS.md qui concernent un skill et qui existent en base :
-    celui du département, puis celui du sous-domaine."""
+def _activation_items(skill: Skill, active: list, added_sources: set) -> list:
+    """Blocs ajoutés par l'activation d'un skill (Tier 2), dans cet ordre :
+    AGENTS.md du département, AGENTS.md du sous-domaine, corps du skill.
+    Le plus spécifique est le plus proche de la fin : il a priorité (règle surchargée).
+    `active` et `added_sources` sont mis à jour ici.
+    """
+    if any(s.pk == skill.pk for s in active):
+        return []  # déjà actif : on n'ajoute rien, le contexte reste append-only
+    active.append(skill)
+
     candidates = [
         AgentsFile.objects.filter(level=AgentsFile.Level.DEPARTMENT,
                                   department=skill.department).first(),
@@ -99,55 +109,10 @@ def _agents_candidates(skill: Skill) -> list:
                                   department=skill.department,
                                   subdomain=skill.subdomain).first(),
     ]
-    return [agents for agents in candidates if agents is not None]
-
-
-def _deactivate_skill(skill: Skill, items: list, active: list,
-                      added_sources: set, loaded: set) -> None:
-    """Désactive un skill : retire son corps, ses références, et ses AGENTS.md
-    que plus aucun skill actif n'utilise. `items`, `active`, `added_sources` et `loaded`
-    sont modifiés sur place.
-    """
-    active[:] = [s for s in active if s.pk != skill.pk]
-    refs_prefix = Path(skill.path).parent.as_posix() + "/references/"
-    # AGENTS.md encore utiles aux skills restants : on ne les retire pas.
-    still_needed = {a.path for other in active for a in _agents_candidates(other)}
-    agents_to_drop = {a.path for a in _agents_candidates(skill)} - still_needed
-
-    kept = []
-    for item in items:
-        is_body = item.kind == "skill_body" and item.source == skill.name
-        is_reference = item.kind == "reference" and item.source.startswith(refs_prefix)
-        is_agents = item.kind == "agents" and item.source in agents_to_drop
-        if is_reference:
-            loaded.discard(item.source)       # la référence pourra être rechargée plus tard
-        if is_agents:
-            added_sources.discard(item.source)  # l'AGENTS.md pourra être rajouté plus tard
-        if not (is_body or is_reference or is_agents):
-            kept.append(item)
-    items[:] = kept
-
-
-def _activate_skill(skill_name: str, items: list, active: list, added_sources: set,
-                    loaded: set, evictions: list) -> None:
-    """Active un skill et ajoute à la fin (Tier 2), dans cet ordre :
-    AGENTS.md du département, AGENTS.md du sous-domaine, corps du skill.
-    Le plus spécifique est le plus proche de la fin : il a priorité (règle surchargée).
-    S'il y a déjà 2 skills actifs, le plus ancien est désactivé d'abord.
-    """
-    skill = _find_skill(skill_name)
-    if any(s.pk == skill.pk for s in active):
-        return  # déjà actif : on n'ajoute rien, le contexte reste append-only
-
-    while len(active) >= MAX_ACTIVE_SKILLS:
-        oldest = active[0]
-        _deactivate_skill(oldest, items, active, added_sources, loaded)
-        evictions.append(f"deactivated:{oldest.name}")
-    active.append(skill)
-
-    for agents in _agents_candidates(skill):
-        # Déjà ajouté (par un autre skill encore actif) : on saute.
-        if agents.path in added_sources:
+    items = []
+    for agents in candidates:
+        # Absent de la base, ou déjà ajouté par un autre skill : on saute.
+        if agents is None or agents.path in added_sources:
             continue
         added_sources.add(agents.path)
         items.append(ContextItem(tier=2, kind="agents", text=agents.content,
@@ -156,11 +121,21 @@ def _activate_skill(skill_name: str, items: list, active: list, added_sources: s
     body_text = f"Skill activé : {skill.name}\n\n{skill.body}"
     items.append(ContextItem(tier=2, kind="skill_body", text=body_text,
                              tokens=count_tokens(body_text), source=skill.name))
+    return items
+
+
+def _without_skill(items: list, skill: Skill) -> list:
+    """Retire le corps et les références d'un skill. Les AGENTS.md restent (l'autre skill
+    actif peut en dépendre)."""
+    references_prefix = (Path(skill.path).parent / "references").as_posix() + "/"
+    return [i for i in items
+            if not ((i.kind == "skill_body" and i.source == skill.name)
+                    or (i.kind == "reference" and i.source.startswith(references_prefix)))]
 
 
 def _reference_items(skill_name: str, filename: str, active: list, loaded: set) -> list:
     """Bloc ajouté par load_reference (Tier 3) : un fichier du dossier references/ d'un skill.
-    `loaded` mémorise les chemins déjà chargés (pas de doublon).
+    `loaded` mémorise les fichiers déjà chargés (pas de doublon).
     """
     skill = next((s for s in active if s.name == skill_name), None)
     if skill is None:
@@ -170,11 +145,11 @@ def _reference_items(skill_name: str, filename: str, active: list, loaded: set) 
     if filename in ("", ".", "..") or "/" in filename or "\\" in filename:
         raise ValueError(f"nom de fichier de référence invalide : '{filename}'")
 
-    relative = Path(skill.path).parent / "references" / filename
-    key = relative.as_posix()
+    key = (skill.pk, filename)
     if key in loaded:
         return []  # déjà chargé : on n'ajoute rien
 
+    relative = Path(skill.path).parent / "references" / filename
     folder = (REPO_ROOT / Path(skill.path).parent / "references").resolve()
     file_path = (REPO_ROOT / relative).resolve()
     # Deuxième barrière : le fichier doit vraiment se trouver dans references/ du skill.
@@ -190,7 +165,7 @@ def _reference_items(skill_name: str, filename: str, active: list, loaded: set) 
     loaded.add(key)
     text = f"Référence : {skill.name}/{filename}\n\n{content}"
     return [ContextItem(tier=3, kind="reference", text=text, tokens=count_tokens(text),
-                        source=key)]
+                        source=relative.as_posix())]
 
 
 def _allowed_tools(active: list) -> list:
@@ -201,44 +176,6 @@ def _allowed_tools(active: list) -> list:
             if tool not in names:
                 names.append(tool)
     return names
-
-
-def _tool_tokens(tool_names: list) -> int:
-    """Somme des tokens des définitions des outils donnés."""
-    return sum(Tool.objects.filter(name__in=tool_names).values_list("tokens", flat=True))
-
-
-def _total_tokens(items: list, active: list) -> int:
-    """Taille actuelle du contexte : blocs de texte + définitions des outils autorisés."""
-    return sum(item.tokens for item in items) + _tool_tokens(_allowed_tools(active))
-
-
-def _enforce_budget(items: list, active: list, added_sources: set, loaded: set,
-                    evictions: list, budget: int, keep_source: str = "") -> None:
-    """Ramène le contexte dans le budget si possible (mode progressif seulement).
-
-    keep_source : bloc ajouté par l'événement en cours (une référence que l'IA vient de
-    demander). Il est protégé pendant cet événement : sinon il serait déchargé aussitôt.
-    Il redevient évinçable à l'événement suivant. Pendant ce temps, on ne désactive aucun
-    skill (la référence protégée pourrait appartenir au skill le plus ancien).
-    """
-    # (Le masquage des observations du Role 2 viendra ici, avant l'étape 1.)
-
-    # Étape 1 : décharger les références, la plus ancienne d'abord.
-    while _total_tokens(items, active) > budget:
-        index = next((i for i, item in enumerate(items)
-                      if item.kind == "reference" and item.source != keep_source), None)
-        if index is None:
-            break
-        removed = items.pop(index)
-        loaded.discard(removed.source)
-        evictions.append(f"unloaded:{removed.source}")
-
-    # Étape 2 : désactiver le skill le plus ancien. On garde toujours au moins un skill.
-    while not keep_source and len(active) > 1 and _total_tokens(items, active) > budget:
-        oldest = active[0]
-        _deactivate_skill(oldest, items, active, added_sources, loaded)
-        evictions.append(f"deactivated:{oldest.name}")
 
 
 def compile_context(events: list, budget: int = 6000, mode: str = "progressive") -> CompileResult:
@@ -255,31 +192,30 @@ def compile_context(events: list, budget: int = 6000, mode: str = "progressive")
 
     active = []            # skills actifs (mode progressif), du plus ancien au plus récent
     added_sources = set()  # chemins des AGENTS.md déjà ajoutés (évite les doublons)
-    loaded = set()         # chemins des références déjà chargées
-    evictions = []         # ce qui a été retiré, dans l'ordre ("unloaded:...", "deactivated:...")
+    loaded = set()         # références déjà chargées : (id du skill, nom du fichier)
+    seen_obs = set()       # identifiants d'observations déjà présentes
+    evictions = []         # ex. "deactivated:invoice-validation"
 
     for event in events:
-        keep_source = ""   # bloc ajouté par cet événement et protégé de l'éviction
         if event.kind in CONVERSATION_PREFIXES:
             items.append(_conversation_item(event))
+        elif event.kind == "observation":
+            items.append(_observation_item(event, seen_obs))
         elif event.kind == "activate_skill":
-            if monolithic:
-                _find_skill(event.skill)  # tout est déjà chargé : on vérifie seulement le nom
-            else:
-                _activate_skill(event.skill, items, active, added_sources, loaded, evictions)
+            skill = _find_skill(event.skill)
+            if not monolithic:  # en monolithique, tout est déjà chargé
+                already_active = any(s.pk == skill.pk for s in active)
+                if not already_active and len(active) >= MAX_ACTIVE_SKILLS:
+                    oldest = active.pop(0)   # le plus ancien est désactivé
+                    items = _without_skill(items, oldest)
+                    loaded = {key for key in loaded if key[0] != oldest.pk}
+                    evictions.append(f"deactivated:{oldest.name}")
+                items.extend(_activation_items(skill, active, added_sources))
         elif event.kind == "load_reference":
             if not monolithic:  # en monolithique, les références ne sont pas chargées (contrat)
-                new_items = _reference_items(event.skill, event.filename, active, loaded)
-                items.extend(new_items)
-                if new_items:
-                    keep_source = new_items[0].source
-        elif event.kind in NOT_IMPLEMENTED_KINDS:
-            raise NotImplementedError(f"événement '{event.kind}' pas encore implémenté")
+                items.extend(_reference_items(event.skill, event.filename, active, loaded))
         else:
             raise ValueError(f"type d'événement inconnu : '{event.kind}'")
-
-        if not monolithic:  # pas d'éviction en monolithique : le budget peut être dépassé
-            _enforce_budget(items, active, added_sources, loaded, evictions, budget, keep_source)
 
     if monolithic:
         # Tous les skills et tous les outils sont considérés comme actifs.
@@ -290,7 +226,7 @@ def compile_context(events: list, budget: int = 6000, mode: str = "progressive")
     else:
         active_names = [s.name for s in active]
         allowed_tools = _allowed_tools(active)
-        tool_tokens = _tool_tokens(allowed_tools)
+        tool_tokens = sum(Tool.objects.filter(name__in=allowed_tools).values_list("tokens", flat=True))
 
     return CompileResult(
         text=SEPARATOR.join(item.text for item in items),
@@ -301,6 +237,6 @@ def compile_context(events: list, budget: int = 6000, mode: str = "progressive")
         active_skills=active_names,
         allowed_tools=allowed_tools,
         tool_tokens=tool_tokens,
-        compacted=bool(evictions),  # True dès qu'un bloc a été retiré
+        compacted=bool(evictions),   # True seulement si un skill a été désactivé
         evictions=evictions,
     )

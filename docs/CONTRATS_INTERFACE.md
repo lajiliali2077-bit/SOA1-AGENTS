@@ -1,7 +1,6 @@
 # Contrats d'interface, version 0 (brouillon du Role 1, à valider par l'équipe)
 
-Règle : on change un nom ICI avant de coder, jamais après. Rien n'est implémenté.
-Les tokens sont des ESTIMATIONS (tiktoken o200k_base, tokenizer OpenAI, pas celui de Gemini).
+Règle : on change un nom ICI avant de coder, jamais après. Règle : on change un nom ICI avant de coder, jamais après. Implémenté : compilateur (sections 1, 2 et 7), registre. Le reste : à livrer par chaque rôle.
 
 ## 0. Une app Django par service (noms proposés)
 
@@ -104,4 +103,9 @@ La signature du vérificateur de règles (IBAN masqué, montants, ligne « Skill
 - Tests du compilateur : python manage.py test compiler
 
 - mode="monolithic" : items tier 1 (AGENTS.md global) et tier 2 (autres AGENTS.md, puis corps de TOUS les skills), sans index ni références (Tier 3). allowed_tools = tous les outils, active_skills = tous les skills (exception à la règle des 2 maximum : Role 3 et Role 5, à confirmer). tool_tokens = tous les outils. Pas d'éviction : tokens peut dépasser budget, compacted vaut False. activate_skill et load_reference sont acceptés et ignorés (même liste d'événements rejouable dans les deux modes). Un mode inconnu lève ValueError.
+- observation : item tier 0, kind "observation", source = obs_id, texte "Observation (<outil>, <obs_id>) :" suivi de la sortie complète. Le masquage (Role 2) sera appelé par le compilateur à l'incrément d'éviction.
+- 3e skill actif : implémenté (le plus ancien est désactivé, son corps et ses références sont retirés, ses AGENTS.md restent).
+- compiler/serialize.py : events_from_list(json) -> list[Event] (ValueError si invalide), result_to_dict(result) -> dict (pour json.dumps).
+
+# Contrats d'interface, version 1 (Role 1 ; compilateur utilisable, voir docs/MODE_EMPLOI_COMPILATEUR.md)
 

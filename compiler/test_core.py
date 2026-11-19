@@ -98,10 +98,7 @@ class CompileContextTests(TestCase):
         with self.assertRaises(ValueError):
             compile_context([Event(kind="n_importe_quoi")])
 
-    def test_evenement_pas_encore_implemente(self):
-        with self.assertRaises(NotImplementedError):
-            compile_context([Event(kind="observation", tool="get_invoice",
-                                   text="sortie", obs_id="obs-0001")])
+    
 
     
 
@@ -157,12 +154,7 @@ class CompileContextTests(TestCase):
         with self.assertRaises(ValueError):
             compile_context([Event(kind="activate_skill", skill="n-existe-pas")])
 
-    def test_troisieme_skill_pas_encore_implemente(self):
-        events = [Event(kind="activate_skill", skill="invoice-validation"),
-                  Event(kind="activate_skill", skill="vendor-check"),
-                  Event(kind="activate_skill", skill="cv-screening")]
-        with self.assertRaises(NotImplementedError):
-            compile_context(events)
+    
 
     def test_outils_autorises_et_tokens(self):
         events = [Event(kind="activate_skill", skill="invoice-validation"),
