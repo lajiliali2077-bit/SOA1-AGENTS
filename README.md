@@ -518,7 +518,7 @@ Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/api/compile/ -ContentT
 
 ### Présentation PowerPoint (demandée par l'énoncé)
 
-- [ ] Créer le .pptx à partir du plan de `docs/PRESENTATION.md` (18 diapositives).
+- [ ] Créer le .pptx à partir du plan de `docs/PRESENTATION.md` : 23 diapositives réparties entre les 5 membres, avec le contenu, le visuel et la section du README de chaque diapositive.
 - [ ] **Exporter les diagrammes** : copier chaque bloc ```` ```mermaid ```` de ce README et de `docs/ARCHITECTURE.md` dans https://mermaid.live, puis *Actions > PNG*. L'énoncé demande des diagrammes « dessinés par votre équipe » : on peut aussi les **redessiner** dans draw.io (https://app.diagrams.net) à partir de ces schémas.
 - [ ] **Graphique des tokens** : ouvrir `docs/benchmark.csv` dans Excel, puis faire un histogramme « total progressif » contre « total monolithique » par tâche.
 - [ ] **Captures d'écran** : tableau de bord, sortie de `demo` (fin-02 avec la garde), `pytest` (36 passed), webhook 200 et 403. Elles servent aussi de secours si la démo en direct échoue.
