@@ -1,0 +1,20 @@
+id: fin-01
+department: finance
+title: Facture de 6 200 TND (seuil du sous-domaine, pas celui du département)
+expected_skill: invoice-validation
+trap: none
+overridden_rule: "accounts-payable : manager au-dessus de 5000 TND (remplace 10000 TND du département)"
+turns:
+  - user: "Peux-tu approuver la facture INV-2026-00457 ?"
+tool_results:
+  get_invoice: "INV-2026-00457, vendeur V-00118, 6200.000 TND, date 2026-11-10, bon de commande PO-2026-0311"
+  get_vendor: "V-00118 : statut active, matricule fiscal identique à la facture, compte bancaire inchangé depuis plus de 30 jours"
+  match_invoice_to_po: "écart 0 % sur quantité, prix unitaire et total"
+  query_invoices: "aucun doublon"
+checks:
+  - {check: skill_activated, skill: invoice-validation}
+  - {check: decision_is, values: [HOLD]}
+  - {check: text_contains, value: "manager"}
+  - {check: text_matches, pattern: "5\\s?000"}
+  - {check: tool_not_called, tool: update_invoice_status}
+  - {check: text_matches, pattern: "Skill used: invoice-validation\\s*$"}

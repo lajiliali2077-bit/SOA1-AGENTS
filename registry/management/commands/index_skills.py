@@ -1,40 +1,37 @@
-from django.core.management.base import BaseCommand, CommandError
+"""python manage.py index_skills : lit AGENTS.md, SKILL.md et tools/*.yaml et les enregistre en base."""
 
-from registry.indexer import index_all, relative_path
-from registry.validation import ACTIVE, ERROR, NEEDS_REVIEW, REJECTED, WARNING
+from django.conf import settings
+from django.core.management.base import BaseCommand
+
+from registry.loader import department_tokens, index_all
 
 
 class Command(BaseCommand):
-    help = "Valide et indexe les skills, les outils et les AGENTS.md dans le registre (relançable)."
+    help = "Valide et enregistre les skills, les outils et les AGENTS.md."
 
     def handle(self, *args, **options):
-        report = index_all()
+        summary = index_all()
 
-        if report.catalog_errors:
-            for error in report.catalog_errors:
-                self.stderr.write(self.style.ERROR(f"ERREUR CATALOGUE : {error}"))
-            raise CommandError("Catalogue d'outils invalide : rien n'a été enregistré.")
+        for path, problems in summary["needs_review"].items():
+            self.stdout.write(self.style.WARNING(f"À VALIDER : {path}"))
+            for problem in problems:
+                self.stdout.write(f"    {problem}")
+        for path, problems in summary["rejected"].items():
+            self.stdout.write(self.style.ERROR(f"REJETÉ : {path}"))
+            for problem in problems:
+                self.stdout.write(f"    {problem}")
 
-        for r in report.needs_review:
-            self.stdout.write(self.style.WARNING(f"À VALIDER : {relative_path(r.path)}"))
-            for issue in r.issues:
-                if issue.severity == WARNING:
-                    self.stdout.write(self.style.WARNING(f"    {issue.code} : {issue.message}"))
-        for r in report.rejected:
-            self.stderr.write(self.style.ERROR(f"REJETÉ : {relative_path(r.path)}"))
-            for issue in r.issues:
-                if issue.severity == ERROR:
-                    self.stderr.write(self.style.ERROR(f"    {issue.code} : {issue.message}"))
+        counts = summary["counts"]
+        self.stdout.write(self.style.SUCCESS(
+            f"Enregistré : {counts['skills']} skills, {counts['tools']} outils, "
+            f"{counts['agents']} AGENTS.md"))
+        self.stdout.write(f"Skills : {len(summary['active'])} active, "
+                          f"{len(summary['needs_review'])} needs_review, "
+                          f"{len(summary['rejected'])} rejected")
 
-        for label, title in (("tools", "Outils"), ("skills", "Skills"), ("agents", "AGENTS.md")):
-            self.stdout.write(self.style.SUCCESS(
-                f"{title} : {report.created[label]} créés, {report.refreshed[label]} rafraîchis, "
-                f"{report.removed[label]} supprimés."
-            ))
-        counts = report.status_counts
-        self.stdout.write(
-            f"Statuts des skills : {counts[ACTIVE]} active, {counts[NEEDS_REVIEW]} needs_review, "
-            f"{counts[REJECTED]} rejected."
-        )
-        if report.rejected:
-            raise CommandError(f"{len(report.rejected)} skill(s) rejeté(s) : indexation partielle, corrigez-les.")
+        self.stdout.write("Taille des départements (tokens) :")
+        for folder in sorted((settings.BASE_DIR / "departments").iterdir()):
+            if folder.is_dir():
+                size = department_tokens(folder.name)
+                self.stdout.write(f"    {folder.name} : {size['total']} "
+                                  f"({size['markdown']} Markdown + {size['tools']} outils)")

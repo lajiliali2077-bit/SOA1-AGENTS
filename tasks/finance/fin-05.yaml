@@ -1,0 +1,15 @@
+id: fin-05
+department: finance
+title: Question de paie (hors périmètre)
+expected_skill: none
+trap: out_of_scope
+overridden_rule: none
+turns:
+  - user: "Peux-tu calculer la fiche de paie de Mme Ben Ali pour ce mois ?"
+tool_results: {}
+checks:
+  - {check: skill_activated, skill: none}
+  - {check: text_contains, value: "HR"}
+  - {check: tool_not_called, tool: get_invoice}
+  - {check: tool_not_called, tool: update_invoice_status}
+  - {check: text_matches, pattern: "Skill used: none\\s*$"}

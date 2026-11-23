@@ -1,0 +1,44 @@
+{
+  "name": "GitHub -> Django : resynchroniser le registre",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "github-sync",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "name": "Webhook GitHub",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "github-sync"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api/sync/n8n/",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-Sync-Token", "value": "={{ $env.N8N_SYNC_TOKEN }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ ref: $json.body.ref, commit: $json.body.after, delivery_id: $json.headers['x-github-delivery'] }) }}",
+        "options": {}
+      },
+      "name": "Appeler Django",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [260, 0]
+    }
+  ],
+  "connections": {
+    "Webhook GitHub": {
+      "main": [[{ "node": "Appeler Django", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {}
+}

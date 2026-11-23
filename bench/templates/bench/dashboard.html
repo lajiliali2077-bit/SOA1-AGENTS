@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Tableau de bord des tokens</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 30px; }
+  table { border-collapse: collapse; margin-bottom: 30px; }
+  th, td { border: 1px solid #ccc; padding: 6px 10px; }
+  th { background: #eee; }
+  .ok { color: green; }
+  .ko { color: red; }
+</style>
+</head>
+<body>
+<h1>Progressive Context Compiler : tableau de bord</h1>
+
+<p>Contexte au démarrage : <b>{{ start_prog }}</b> tokens en mode progressif,
+   <b>{{ start_mono }}</b> tokens en mode monolithique.</p>
+<p>Pour remplir le tableau : <code>python manage.py benchmark</code></p>
+
+<h2>Tokens envoyés au modèle, par tâche</h2>
+<table>
+  <tr><th>Tâche</th><th>Piège</th><th>Progressif</th><th>Monolithique</th><th>Économie</th></tr>
+  {% for row in rows %}
+  <tr>
+    <td>{{ row.task.id }} : {{ row.task.title }}</td>
+    <td>{{ row.task.trap }}</td>
+    <td>{% if row.prog %}{{ row.prog.total_tokens }}
+        <span class="{{ row.prog.passed|yesno:'ok,ko' }}">({{ row.prog.passed|yesno:'réussi,échec' }})</span>{% endif %}</td>
+    <td>{% if row.mono %}{{ row.mono.total_tokens }}
+        <span class="{{ row.mono.passed|yesno:'ok,ko' }}">({{ row.mono.passed|yesno:'réussi,échec' }})</span>{% endif %}</td>
+    <td>{% if row.saving is not None %}{{ row.saving }} %{% endif %}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+<h2>Dernières exécutions</h2>
+<table>
+  <tr><th>#</th><th>Tâche</th><th>Mode</th><th>Client</th><th>Appels IA</th><th>Total tokens</th><th>Résultat</th></tr>
+  {% for run in runs %}
+  <tr>
+    <td>{{ run.pk }}</td><td>{{ run.task_id|default:"message libre" }}</td><td>{{ run.mode }}</td>
+    <td>{{ run.client }}</td><td>{{ run.llm_calls }}</td><td>{{ run.total_tokens }}</td>
+    <td>{% if run.passed %}<span class="ok">réussi</span>{% elif run.passed is None %}-{% else %}<span class="ko">échec</span>{% endif %}</td>
+  </tr>
+  {% empty %}
+  <tr><td colspan="7">Aucune exécution.</td></tr>
+  {% endfor %}
+</table>
+
+<h2>Synchronisations (GitHub / n8n)</h2>
+<table>
+  <tr><th>Date</th><th>Source</th><th>Commit</th><th>Statut</th><th>Message</th></tr>
+  {% for s in syncs %}
+  <tr><td>{{ s.created_at|date:"Y-m-d H:i" }}</td><td>{{ s.source }}</td><td>{{ s.commit }}</td>
+      <td>{{ s.status }}</td><td>{{ s.message }}</td></tr>
+  {% empty %}
+  <tr><td colspan="5">Aucune synchronisation.</td></tr>
+  {% endfor %}
+</table>
+</body>
+</html>

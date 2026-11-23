@@ -1,242 +1,224 @@
-"""Compilateur de contexte (version 5 : observations, désactivation du plus ancien skill).
+"""Progressive Context Compiler : choisit ce qu'on envoie à l'IA pour une tâche.
 
-Principe : compile_context est une fonction PURE. Mêmes événements = même contexte.
-Elle lit la base du registre et, pour load_reference, un fichier du dépôt.
-Le texte est construit en ajoutant des blocs à la fin, séparés par une ligne vide,
-donc le texte de n événements est le début du texte de n+1 événements (préfixe stable,
-compatible avec le cache KV), tant qu'aucune désactivation de skill n'a eu lieu.
+Mode "progressive" (notre solution), divulgation progressive en 3 niveaux :
+    Niveau 1 : AGENTS.md global + liste des skills (nom et description)      -> toujours
+    Niveau 2 : AGENTS.md du département et du sous-domaine + corps du skill  -> quand l'IA active le skill
+    Niveau 3 : fichier du dossier references/ du skill                       -> quand l'IA le demande
+Puis on respecte le budget de tokens :
+    1. masquer les anciennes sorties d'outils (dès 70 % du budget)
+    2. retirer les références, la plus ancienne d'abord
+    3. désactiver le skill le plus ancien (on en garde toujours au moins un)
 
-Deux modes :
-- "progressive" : Tier 1 au départ, puis Tier 2 et Tier 3 seulement au besoin.
-- "monolithic"  : tout est chargé au départ (sert de comparaison au benchmark).
-
-Pas encore fait : éviction par budget et masquage des observations (Role 2).
+Mode "monolithic" (pour comparer) : on envoie tout, tout le temps, sans budget.
 """
 
-from pathlib import Path
+from dataclasses import dataclass, field
 
+from django.conf import settings
+
+from masking.services import mask_observations
+from registry.loader import count_tokens
 from registry.models import AgentsFile, Skill, Tool
-from registry.parser import count_tokens
 
-from .types import CompileResult, ContextItem, Event
-
-SEPARATOR = "\n\n"
-CONVERSATION_PREFIXES = {"user": "Utilisateur : ", "assistant": "Assistant : "}
 MAX_ACTIVE_SKILLS = 2
-MODES = ("progressive", "monolithic")
-
-# Racine du dépôt : compiler/core.py est un niveau sous la racine (là où se trouve manage.py).
-# Les tests remplacent cette valeur par un dossier temporaire.
-REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
-def _tier1_items() -> list:
-    """Tier 1 : AGENTS.md global, puis index des skills. Toujours présent, jamais évincé."""
-    items = []
-    root = AgentsFile.objects.filter(level=AgentsFile.Level.GLOBAL).first()
-    if root is not None:
-        items.append(ContextItem(tier=1, kind="agents", text=root.content,
-                                 tokens=root.tokens, source=root.path))
-    # L'ordre vient de Skill.Meta.ordering (département, sous-domaine, nom) : il est stable.
-    lines = [f"- {s.name} ({s.department}) : {s.description}" for s in Skill.objects.all()]
-    index_text = "Skills disponibles :\n" + "\n".join(lines)
-    items.append(ContextItem(tier=1, kind="skill_index", text=index_text,
-                             tokens=count_tokens(index_text), source="skill_index"))
-    return items
+@dataclass(frozen=True)
+class Event:
+    """Un élément de l'historique de la conversation."""
+    kind: str            # user | assistant | activate_skill | load_reference | observation
+    text: str = ""       # message, ou sortie complète d'un outil
+    skill: str = ""      # pour activate_skill et load_reference
+    filename: str = ""   # pour load_reference
+    tool: str = ""       # pour observation
+    obs_id: str = ""     # pour observation
 
 
-def _monolithic_items() -> tuple:
-    """Mode monolithique : tous les AGENTS.md, puis tous les corps de skills.
-    Les tiers sont les mêmes qu'en mode progressif (global = 1, le reste = 2) pour que
-    la composition des tokens soit comparable. Retourne (items, liste de tous les skills).
-    """
-    items = []
-    # L'ordre vient de AgentsFile.Meta.ordering (niveau, département, sous-domaine).
-    for agents in AgentsFile.objects.all():
-        tier = 1 if agents.level == AgentsFile.Level.GLOBAL else 2
-        items.append(ContextItem(tier=tier, kind="agents", text=agents.content,
-                                 tokens=agents.tokens, source=agents.path))
-    skills = list(Skill.objects.all())
-    for skill in skills:
-        text = f"Skill : {skill.name}\n\n{skill.body}"
-        items.append(ContextItem(tier=2, kind="skill_body", text=text,
-                                 tokens=count_tokens(text), source=skill.name))
-    return items, skills
+@dataclass
+class Block:
+    """Un morceau du contexte compilé."""
+    kind: str            # agents | index | skill | reference | user | assistant | observation | masked
+    text: str
+    source: str = ""     # chemin du fichier, nom du skill ou obs_id
+    tokens: int = 0
+
+    def __post_init__(self):
+        if not self.tokens:
+            self.tokens = count_tokens(self.text)
 
 
-def _conversation_item(event: Event) -> ContextItem:
-    """Transforme un événement user ou assistant en bloc de conversation (tier 0)."""
-    text = CONVERSATION_PREFIXES[event.kind] + event.text
-    return ContextItem(tier=0, kind=event.kind, text=text, tokens=count_tokens(text))
+@dataclass
+class CompileResult:
+    text: str                  # contexte envoyé à l'IA
+    tokens: int                # total : texte + définitions des outils autorisés
+    budget: int
+    blocks: list
+    active_skills: list
+    allowed_tools: list
+    tool_tokens: int
+    evictions: list = field(default_factory=list)   # ex. "masked:obs-0003", "unloaded:...", "deactivated:..."
+
+    @property
+    def compacted(self) -> bool:
+        return bool(self.evictions)
+
+    def to_dict(self) -> dict:
+        return {"text": self.text, "tokens": self.tokens, "budget": self.budget,
+                "active_skills": self.active_skills, "allowed_tools": self.allowed_tools,
+                "tool_tokens": self.tool_tokens, "evictions": self.evictions,
+                "compacted": self.compacted,
+                "blocks": [{"kind": b.kind, "source": b.source, "tokens": b.tokens}
+                           for b in self.blocks]}
 
 
-def _observation_item(event: Event, seen_obs: set) -> ContextItem:
-    """Transforme une sortie d'outil en bloc complet (tier 0). Le masquage sera fait plus tard."""
-    if not event.tool or not event.obs_id:
-        raise ValueError("une observation doit avoir un outil (tool) et un identifiant (obs_id)")
-    if event.obs_id in seen_obs:
-        raise ValueError(f"observation déjà présente : '{event.obs_id}'")
-    seen_obs.add(event.obs_id)
-    text = f"Observation ({event.tool}, {event.obs_id}) :\n{event.text}"
-    return ContextItem(tier=0, kind="observation", text=text, tokens=count_tokens(text),
-                       source=event.obs_id)
+# ----- Petites fonctions utiles -----
 
-
-def _find_skill(name: str) -> Skill:
-    """Cherche un skill par son nom. Erreur s'il n'existe pas ou si le nom est ambigu."""
-    matches = list(Skill.objects.filter(name=name))
-    if not matches:
-        raise ValueError(f"skill inconnu : '{name}'")
-    if len(matches) > 1:
-        raise ValueError(f"nom de skill ambigu : '{name}' existe dans plusieurs départements")
-    return matches[0]
-
-
-def _activation_items(skill: Skill, active: list, added_sources: set) -> list:
-    """Blocs ajoutés par l'activation d'un skill (Tier 2), dans cet ordre :
-    AGENTS.md du département, AGENTS.md du sous-domaine, corps du skill.
-    Le plus spécifique est le plus proche de la fin : il a priorité (règle surchargée).
-    `active` et `added_sources` sont mis à jour ici.
-    """
-    if any(s.pk == skill.pk for s in active):
-        return []  # déjà actif : on n'ajoute rien, le contexte reste append-only
-    active.append(skill)
-
-    candidates = [
-        AgentsFile.objects.filter(level=AgentsFile.Level.DEPARTMENT,
-                                  department=skill.department).first(),
-        AgentsFile.objects.filter(level=AgentsFile.Level.SUBDOMAIN,
-                                  department=skill.department,
-                                  subdomain=skill.subdomain).first(),
-    ]
-    items = []
-    for agents in candidates:
-        # Absent de la base, ou déjà ajouté par un autre skill : on saute.
-        if agents is None or agents.path in added_sources:
-            continue
-        added_sources.add(agents.path)
-        items.append(ContextItem(tier=2, kind="agents", text=agents.content,
-                                 tokens=agents.tokens, source=agents.path))
-
-    body_text = f"Skill activé : {skill.name}\n\n{skill.body}"
-    items.append(ContextItem(tier=2, kind="skill_body", text=body_text,
-                             tokens=count_tokens(body_text), source=skill.name))
-    return items
-
-
-def _without_skill(items: list, skill: Skill) -> list:
-    """Retire le corps et les références d'un skill. Les AGENTS.md restent (l'autre skill
-    actif peut en dépendre)."""
-    references_prefix = (Path(skill.path).parent / "references").as_posix() + "/"
-    return [i for i in items
-            if not ((i.kind == "skill_body" and i.source == skill.name)
-                    or (i.kind == "reference" and i.source.startswith(references_prefix)))]
-
-
-def _reference_items(skill_name: str, filename: str, active: list, loaded: set) -> list:
-    """Bloc ajouté par load_reference (Tier 3) : un fichier du dossier references/ d'un skill.
-    `loaded` mémorise les fichiers déjà chargés (pas de doublon).
-    """
-    skill = next((s for s in active if s.name == skill_name), None)
+def find_skill(name: str) -> Skill:
+    skill = Skill.objects.filter(name=name).first()
     if skill is None:
-        raise ValueError(f"skill '{skill_name}' non actif : activez-le avant de charger ses références")
-
-    # Sécurité : seulement un nom de fichier simple, jamais un chemin.
-    if filename in ("", ".", "..") or "/" in filename or "\\" in filename:
-        raise ValueError(f"nom de fichier de référence invalide : '{filename}'")
-
-    key = (skill.pk, filename)
-    if key in loaded:
-        return []  # déjà chargé : on n'ajoute rien
-
-    relative = Path(skill.path).parent / "references" / filename
-    folder = (REPO_ROOT / Path(skill.path).parent / "references").resolve()
-    file_path = (REPO_ROOT / relative).resolve()
-    # Deuxième barrière : le fichier doit vraiment se trouver dans references/ du skill.
-    if folder not in file_path.parents or not file_path.is_file():
-        raise ValueError(f"référence introuvable : {skill.name}/{filename}")
-
-    try:
-        content = file_path.read_text(encoding="utf-8")
-    except UnicodeDecodeError:
-        raise ValueError(f"référence illisible (pas du texte UTF-8) : {skill.name}/{filename}") from None
-    content = content.replace("\r\n", "\n")  # même texte sur toutes les machines
-
-    loaded.add(key)
-    text = f"Référence : {skill.name}/{filename}\n\n{content}"
-    return [ContextItem(tier=3, kind="reference", text=text, tokens=count_tokens(text),
-                        source=relative.as_posix())]
+        raise ValueError(f"skill inconnu : '{name}'")
+    return skill
 
 
-def _allowed_tools(active: list) -> list:
-    """Outils autorisés par les skills actifs, sans doublon, dans l'ordre des skills."""
+def allowed_tools(skills: list) -> list:
     names = []
-    for skill in active:
+    for skill in skills:
         for tool in skill.allowed_tools:
             if tool not in names:
                 names.append(tool)
     return names
 
 
+def tool_tokens(names: list) -> int:
+    return sum(Tool.objects.filter(name__in=names).values_list("tokens", flat=True))
+
+
+def conversation_block(event: Event) -> Block:
+    if event.kind == "user":
+        return Block("user", f"Utilisateur : {event.text}")
+    if event.kind == "assistant":
+        return Block("assistant", f"Assistant : {event.text}")
+    return Block("observation", f"Observation ({event.tool}, {event.obs_id}) :\n{event.text}",
+                 source=event.obs_id)
+
+
+def skill_index() -> str:
+    lines = ["Skills disponibles (activez-en un pour lire sa procédure) :"]
+    for s in Skill.objects.all():
+        lines.append(f"- {s.name} ({s.department}) : {s.description}")
+    return "\n".join(lines)
+
+
+def reference_block(skill: Skill, filename: str) -> Block:
+    """Niveau 3 : un fichier du dossier references/ du skill, et seulement de ce dossier."""
+    if "/" in filename or "\\" in filename or ".." in filename:
+        raise ValueError(f"nom de fichier interdit : '{filename}'")
+    path = settings.BASE_DIR / skill.path.replace("SKILL.md", "references") / filename
+    if not path.is_file():
+        raise ValueError(f"référence introuvable : {skill.name}/{filename}")
+    content = path.read_text(encoding="utf-8").replace("\r\n", "\n")
+    return Block("reference", f"Référence : {skill.name}/{filename}\n\n{content}",
+                 source=f"{skill.name}/{filename}")
+
+
+def remove_skill(blocks: list, skill: Skill) -> list:
+    """Retire le corps d'un skill et ses références (ses AGENTS.md restent)."""
+    return [b for b in blocks
+            if not (b.kind == "skill" and b.source == skill.name)
+            and not (b.kind == "reference" and b.source.startswith(skill.name + "/"))]
+
+
+def make_result(blocks, budget, skills, tools, evictions) -> CompileResult:
+    tokens_of_tools = tool_tokens(tools)
+    return CompileResult(
+        text="\n\n".join(b.text for b in blocks),
+        tokens=sum(b.tokens for b in blocks) + tokens_of_tools,
+        budget=budget, blocks=blocks, active_skills=[s.name for s in skills],
+        allowed_tools=tools, tool_tokens=tokens_of_tools, evictions=evictions)
+
+
+# ----- Le compilateur -----
+
 def compile_context(events: list, budget: int = 6000, mode: str = "progressive") -> CompileResult:
-    """Assemble le contexte pour la liste d'événements donnée (voir le contrat, section 2)."""
-    if mode not in MODES:
-        raise ValueError(f"mode inconnu : '{mode}' (attendu : {', '.join(MODES)})")
-    monolithic = mode == "monolithic"
+    if mode == "monolithic":
+        return compile_monolithic(events, budget)
+    if mode != "progressive":
+        raise ValueError(f"mode inconnu : '{mode}'")
 
-    if monolithic:
-        items, all_skills = _monolithic_items()
-    else:
-        items, all_skills = _tier1_items(), []
-    prefix_tokens = sum(item.tokens for item in items)  # tout ce qui précède la conversation
-
-    active = []            # skills actifs (mode progressif), du plus ancien au plus récent
-    added_sources = set()  # chemins des AGENTS.md déjà ajoutés (évite les doublons)
-    loaded = set()         # références déjà chargées : (id du skill, nom du fichier)
-    seen_obs = set()       # identifiants d'observations déjà présentes
-    evictions = []         # ex. "deactivated:invoice-validation"
+    # Niveau 1 : toujours présent
+    blocks = [Block("agents", a.content, a.path) for a in AgentsFile.objects.filter(level=1)]
+    blocks.append(Block("index", skill_index()))
+    active = []        # skills actifs, du plus ancien au plus récent
+    evictions = []
 
     for event in events:
-        if event.kind in CONVERSATION_PREFIXES:
-            items.append(_conversation_item(event))
-        elif event.kind == "observation":
-            items.append(_observation_item(event, seen_obs))
-        elif event.kind == "activate_skill":
-            skill = _find_skill(event.skill)
-            if not monolithic:  # en monolithique, tout est déjà chargé
-                already_active = any(s.pk == skill.pk for s in active)
-                if not already_active and len(active) >= MAX_ACTIVE_SKILLS:
-                    oldest = active.pop(0)   # le plus ancien est désactivé
-                    items = _without_skill(items, oldest)
-                    loaded = {key for key in loaded if key[0] != oldest.pk}
-                    evictions.append(f"deactivated:{oldest.name}")
-                items.extend(_activation_items(skill, active, added_sources))
-        elif event.kind == "load_reference":
-            if not monolithic:  # en monolithique, les références ne sont pas chargées (contrat)
-                items.extend(_reference_items(event.skill, event.filename, active, loaded))
+        if event.kind in ("user", "assistant", "observation"):
+            blocks.append(conversation_block(event))
+
+        elif event.kind == "activate_skill":         # Niveau 2
+            skill = find_skill(event.skill)
+            if skill in active:
+                continue
+            if len(active) == MAX_ACTIVE_SKILLS:      # 2 skills maximum
+                oldest = active.pop(0)
+                blocks = remove_skill(blocks, oldest)
+                evictions.append(f"deactivated:{oldest.name}")
+            active.append(skill)
+            # Règles du département puis du sous-domaine : la plus proche est la dernière lue
+            department_rules = AgentsFile.objects.filter(level=2, department=skill.department)
+            subdomain_rules = AgentsFile.objects.filter(level=3, department=skill.department,
+                                                        subdomain=skill.subdomain)
+            for agents in list(department_rules) + list(subdomain_rules):
+                if agents.path not in [b.source for b in blocks]:
+                    blocks.append(Block("agents", agents.content, agents.path))
+            blocks.append(Block("skill", f"Skill activé : {skill.name}\n\n{skill.body}", skill.name))
+
+        elif event.kind == "load_reference":         # Niveau 3
+            skill = None
+            for s in active:
+                if s.name == event.skill:
+                    skill = s
+            if skill is None:
+                raise ValueError(f"activez le skill '{event.skill}' avant de lire ses références")
+            block = reference_block(skill, event.filename)
+            if block.source not in [b.source for b in blocks]:
+                blocks.append(block)
         else:
             raise ValueError(f"type d'événement inconnu : '{event.kind}'")
 
-    if monolithic:
-        # Tous les skills et tous les outils sont considérés comme actifs.
-        tools = list(Tool.objects.all())
-        active_names = [s.name for s in all_skills]
-        allowed_tools = [t.name for t in tools]
-        tool_tokens = sum(t.tokens for t in tools)
-    else:
-        active_names = [s.name for s in active]
-        allowed_tools = _allowed_tools(active)
-        tool_tokens = sum(Tool.objects.filter(name__in=allowed_tools).values_list("tokens", flat=True))
+    # Budget de tokens
+    def total():
+        return sum(b.tokens for b in blocks) + tool_tokens(allowed_tools(active))
 
-    return CompileResult(
-        text=SEPARATOR.join(item.text for item in items),
-        items=items,
-        tokens=sum(item.tokens for item in items) + tool_tokens,
-        budget=budget,
-        prefix_tokens=prefix_tokens,
-        active_skills=active_names,
-        allowed_tools=allowed_tools,
-        tool_tokens=tool_tokens,
-        compacted=bool(evictions),   # True seulement si un skill a été désactivé
-        evictions=evictions,
-    )
+    # 1. masquage des anciennes sorties d'outils
+    blocks, masked = mask_observations(blocks, budget, tool_tokens(allowed_tools(active)))
+    evictions += [f"masked:{obs_id}" for obs_id in masked]
+    # 2. références, la plus ancienne d'abord
+    references = [b for b in blocks if b.kind == "reference"]
+    while total() > budget and references:
+        oldest = references.pop(0)
+        blocks.remove(oldest)
+        evictions.append(f"unloaded:{oldest.source}")
+    # 3. skill le plus ancien (on garde toujours le plus récent)
+    while total() > budget and len(active) > 1:
+        oldest = active.pop(0)
+        blocks = remove_skill(blocks, oldest)
+        evictions.append(f"deactivated:{oldest.name}")
+
+    return make_result(blocks, budget, active, allowed_tools(active), evictions)
+
+
+def compile_monolithic(events: list, budget: int) -> CompileResult:
+    """Tout est chargé : tous les AGENTS.md, tous les skills, tous les outils. Aucune éviction."""
+    blocks = [Block("agents", a.content, a.path) for a in AgentsFile.objects.all()]
+    skills = list(Skill.objects.all())
+    blocks += [Block("skill", f"Skill : {s.name}\n\n{s.body}", s.name) for s in skills]
+    for event in events:
+        if event.kind in ("user", "assistant", "observation"):
+            blocks.append(conversation_block(event))
+        elif event.kind == "activate_skill":
+            find_skill(event.skill)        # déjà chargé : on vérifie seulement qu'il existe
+        elif event.kind != "load_reference":
+            raise ValueError(f"type d'événement inconnu : '{event.kind}'")
+    all_tools = list(Tool.objects.values_list("name", flat=True))
+    return make_result(blocks, budget, skills, all_tools, [])

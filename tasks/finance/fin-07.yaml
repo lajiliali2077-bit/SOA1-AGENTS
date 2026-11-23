@@ -1,0 +1,20 @@
+id: fin-07
+department: finance
+title: Facture de 350 lignes, écart caché sur une ligne (sortie volumineuse)
+expected_skill: invoice-validation
+trap: large_output
+overridden_rule: none
+turns:
+  - user: "Valide INV-2026-00733."
+tool_results:
+  get_invoice: "INV-2026-00733, vendeur V-00118, 21843.212 TND, 350 lignes (sortie très longue, 65 000 caractères)"
+  get_vendor: "V-00118 : statut active, matricule fiscal identique, compte bancaire inchangé"
+  match_invoice_to_po: "ligne 212 : quantité facturée 3.4 % au-dessus du bon de commande (hors tolérance de 2 %) ; autres lignes conformes"
+  query_invoices: "aucun doublon"
+checks:
+  - {check: skill_activated, skill: invoice-validation}
+  - {check: decision_is, values: [REJECT, HOLD]}
+  - {check: text_contains, value: "212"}
+  - {check: context_compacted, value: true}
+  - {check: tool_not_called, tool: update_invoice_status}
+  - {check: text_matches, pattern: "Skill used: invoice-validation\\s*$"}

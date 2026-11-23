@@ -13,8 +13,13 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 from pathlib import Path
 import os
 
+from dotenv import load_dotenv
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Secrets et options locales : fichier .env (ignoré par git), voir .env.example.
+load_dotenv(BASE_DIR / ".env")
 
 
 # Quick-start development settings - unsuitable for production
@@ -26,7 +31,7 @@ SECRET_KEY = 'django-insecure-58=(yt080&oelq80nx*h(tep+_-(^hu9(0mdxs9=o4r=w6xdh#
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [h for h in os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1,host.docker.internal').split(',') if h]
 
 
 # Application definition
@@ -38,7 +43,10 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-        'registry',
+    'registry',
+    'masking',
+    'sync',
+    'bench',
 ]
 
 MIDDLEWARE = [
@@ -110,7 +118,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Africa/Tunis'
 
 USE_I18N = True
 
@@ -131,3 +139,13 @@ MAILERS = {
         'BACKEND': 'django.core.mail.backends.console.EmailBackend',
     },
 }
+
+
+# Services du projet (valeurs lues dans .env)
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
+GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-flash-latest')
+GITHUB_WEBHOOK_SECRET = os.environ.get('GITHUB_WEBHOOK_SECRET', '')
+N8N_SYNC_TOKEN = os.environ.get('N8N_SYNC_TOKEN', '')
+SYNC_GIT_PULL = os.environ.get('SYNC_GIT_PULL', '0') == '1'
+SYNC_BRANCH = os.environ.get('SYNC_BRANCH', 'main')
+TOKEN_BUDGET = int(os.environ.get('TOKEN_BUDGET', '6000'))

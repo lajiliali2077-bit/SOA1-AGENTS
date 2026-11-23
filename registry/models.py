@@ -2,77 +2,56 @@ from django.db import models
 
 
 class AgentsFile(models.Model):
-    """Un fichier AGENTS.md : global (niveau 1), département (2) ou sous-domaine (3)."""
+    """Un fichier AGENTS.md : 1 = global, 2 = département, 3 = sous-domaine."""
 
-    class Level(models.IntegerChoices):
-        GLOBAL = 1, "Global"
-        DEPARTMENT = 2, "Département"
-        SUBDOMAIN = 3, "Sous-domaine"
-
-    level = models.PositiveSmallIntegerField(choices=Level)
+    path = models.CharField(max_length=300, unique=True)
+    level = models.IntegerField()
     department = models.CharField(max_length=64, blank=True)
     subdomain = models.CharField(max_length=64, blank=True)
-    path = models.CharField(max_length=300, unique=True)  # relatif à la racine du dépôt
     content = models.TextField()
-    tokens = models.PositiveIntegerField()
-    updated_at = models.DateTimeField(auto_now=True)
+    tokens = models.IntegerField()
 
     class Meta:
-        ordering = ["level", "department", "subdomain"]
+        ordering = ["level", "path"]
 
     def __str__(self):
-        return f"AGENTS.md niveau {self.level} : {self.path}"
+        return self.path
 
 
 class Skill(models.Model):
-    """Un skill décrit par un SKILL.md (index de niveau 1, corps de niveau 2).
+    """Un skill (fichier SKILL.md). Les skills rejetés ne sont jamais enregistrés."""
 
-    Seuls les skills actifs ou à valider sont stockés : un skill rejeté par la validation
-    n'entre jamais dans le registre.
-    """
-
-    class Status(models.TextChoices):
-        ACTIVE = "active", "Actif"
-        NEEDS_REVIEW = "needs_review", "À valider"
-
-    name = models.CharField(max_length=64)
+    name = models.CharField(max_length=64, unique=True)
     description = models.TextField()
-    allowed_tools = models.JSONField(default=list, blank=True)
     department = models.CharField(max_length=64)
     subdomain = models.CharField(max_length=64)
-    path = models.CharField(max_length=300, unique=True)  # relatif à la racine du dépôt
-    body = models.TextField()
-    meta_tokens = models.PositiveIntegerField()
-    body_tokens = models.PositiveIntegerField()
-    status = models.CharField(max_length=16, choices=Status, default=Status.ACTIVE)
-    issues = models.JSONField(default=list, blank=True)  # [{"severity", "code", "message"}]
-    updated_at = models.DateTimeField(auto_now=True)
+    path = models.CharField(max_length=300)            # chemin du SKILL.md
+    body = models.TextField()                          # procédure (niveau 2)
+    allowed_tools = models.JSONField(default=list)
+    status = models.CharField(max_length=16)           # active | needs_review
+    index_tokens = models.IntegerField()               # coût de la ligne d'index (niveau 1)
+    body_tokens = models.IntegerField()                # coût du corps (niveau 2)
 
     class Meta:
-        ordering = ["department", "subdomain", "name"]
+        ordering = ["department", "name"]
 
     def __str__(self):
-        return f"{self.department}/{self.subdomain}/{self.name}"
+        return self.name
 
 
 class Tool(models.Model):
-    """Un outil du catalogue tools/<département>.yaml."""
-
-    class Mode(models.TextChoices):
-        READ = "read", "Lecture"
-        WRITE = "write", "Écriture"
+    """Un outil décrit dans tools/<département>.yaml."""
 
     name = models.CharField(max_length=100, unique=True)
     description = models.TextField()
-    mode = models.CharField(max_length=5, choices=Mode)
-    owner = models.CharField(max_length=64)  # département propriétaire (fichier tools/<owner>.yaml)
-    departments = models.JSONField(default=list)  # départements autorisés à l'utiliser
-    parameters = models.JSONField(default=list, blank=True)
-    tokens = models.PositiveIntegerField()
-    updated_at = models.DateTimeField(auto_now=True)
+    mode = models.CharField(max_length=5)              # read | write
+    owner = models.CharField(max_length=64)            # département propriétaire
+    departments = models.JSONField(default=list)       # départements autorisés
+    parameters = models.JSONField(default=list)
+    tokens = models.IntegerField()
 
     class Meta:
         ordering = ["owner", "name"]
 
     def __str__(self):
-        return f"{self.name} ({self.mode})"
+        return self.name

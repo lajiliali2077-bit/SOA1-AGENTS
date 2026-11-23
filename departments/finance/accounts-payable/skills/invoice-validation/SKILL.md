@@ -21,7 +21,7 @@ Do not use this skill for payment scheduling (treasury skills) or for vendor que
 5. Look for duplicates with query_invoices using the same vendor_id, a date window of 30 days around the invoice date and min_amount_tnd set to 95 percent of the amount. Compare number, date and amount of the results.
 6. Choose the approval level from the exact amount in TND. Read references/approval_matrix.md if the amount is above 5000 TND or if the vendor is new.
 7. Decide. APPROVE when all checks pass, REJECT when a check fails and cannot be fixed, HOLD when information is missing or a risk needs a human check.
-8. Show the decision to the user and ask for confirmation. Only after an explicit yes, call update_invoice_status with the decision, a written reason and the approver identifier given by the user.
+8. Show the decision to the user and ask for confirmation. Only after an explicit yes, call update_invoice_status with the decision, a written reason and the approver identifier given by the user. For HOLD, do not call update_invoice_status: the invoice stays pending.
 
 ## Answer template
 Decision: APPROVE, REJECT or HOLD
