@@ -31,7 +31,7 @@ SECRET_KEY = 'django-insecure-58=(yt080&oelq80nx*h(tep+_-(^hu9(0mdxs9=o4r=w6xdh#
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = [h for h in os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1,host.docker.internal').split(',') if h]
+ALLOWED_HOSTS = [h for h in os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1,host.docker.internal,testserver").split(',') if h]
 
 
 # Application definition
@@ -43,6 +43,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'rest_framework',
+    'erp',
     'registry',
     'masking',
     'sync',
@@ -141,9 +143,18 @@ MAILERS = {
 }
 
 
+# Django REST Framework : API ouverte en local (projet de démonstration, pas de comptes utilisateurs)
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [],
+    'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.AllowAny'],
+    'UNAUTHENTICATED_USER': None,
+}
+
 # Services du projet (valeurs lues dans .env)
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
-GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-flash-latest')
+GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-3.5-flash-lite')
+# Facultatif : adresse d'un webhook n8n prévenu à la fin de chaque exécution (voir n8n/)
+N8N_RUN_WEBHOOK_URL = os.environ.get('N8N_RUN_WEBHOOK_URL', '')
 GITHUB_WEBHOOK_SECRET = os.environ.get('GITHUB_WEBHOOK_SECRET', '')
 N8N_SYNC_TOKEN = os.environ.get('N8N_SYNC_TOKEN', '')
 SYNC_GIT_PULL = os.environ.get('SYNC_GIT_PULL', '0') == '1'

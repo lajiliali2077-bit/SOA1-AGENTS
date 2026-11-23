@@ -1,0 +1,13 @@
+id: cs-03
+department: customer-service
+title: "Retour d'un smartphone après 10 jours (délai électronique)"
+expected_skill: return-request
+trap: none
+overridden_rule: "returns : 7 jours pour l'électronique (remplace 14 jours)"
+turns:
+  - user: "Le client veut retourner le smartphone de la commande CMD-2026-0533. C'est possible ?"
+checks:
+  - {check: skill_activated, skill: return-request}
+  - {check: decision_is, values: [REJECT]}
+  - {check: text_matches, pattern: '\b7\b'}
+  - {check: tool_not_called, tool: create_refund}

@@ -1,0 +1,11 @@
+id: cs-07
+department: customer-service
+title: "Résumé d'un compte client (données masquées)"
+expected_skill: customer-summary
+trap: none
+overridden_rule: none
+turns:
+  - user: "Fais-moi un résumé du compte client C-1001."
+checks:
+  - {check: skill_activated, skill: customer-summary}
+  - {check: text_contains, value: "gold"}

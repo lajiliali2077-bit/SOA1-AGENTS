@@ -1,0 +1,12 @@
+id: cs-08
+department: customer-service
+title: "Casque en panne : encore sous garantie ?"
+expected_skill: warranty-claim
+trap: none
+overridden_rule: none
+turns:
+  - user: "Le casque de la commande CMD-2026-0457 ne s'allume plus. Est-il encore sous garantie ?"
+checks:
+  - {check: skill_activated, skill: warranty-claim}
+  - {check: tool_called, tool: get_product}
+  - {check: text_matches, pattern: '(?i)covered: yes|repair'}

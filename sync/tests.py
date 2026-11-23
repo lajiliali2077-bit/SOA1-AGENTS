@@ -28,7 +28,7 @@ class SyncTests(TestCase):
     def test_push_signe_sur_main(self):
         response = self.github({"ref": "refs/heads/main", "after": "abc123"})
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(Skill.objects.count(), 12)           # base resynchronisée
+        self.assertEqual(Skill.objects.count(), 6)            # base resynchronisée
         self.assertEqual(SyncEvent.objects.get().commit, "abc123")
 
     def test_fausse_signature_refusee(self):

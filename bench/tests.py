@@ -1,4 +1,8 @@
-"""Tests de l'agent : format des réponses de l'IA, boucle gouvernée, tâches, API, client Gemini."""
+"""Tests de l'agent : format des réponses de l'IA, boucle gouvernée, mesures, API, client Gemini.
+
+Aucun appel réseau : ScriptedClient rejoue des actions écrites à l'avance, et le SDK Google
+est remplacé par un faux objet.
+"""
 
 import json
 from types import SimpleNamespace
@@ -6,21 +10,34 @@ from types import SimpleNamespace
 from django.test import TestCase, override_settings
 
 from compiler.core import Event
+from erp.models import Refund
 from registry.loader import index_all
 
-from .llm import GeminiClient, LLMError, ScriptedClient, make_client
+from .llm import GeminiClient, LLMError, ScriptedClient
 from .loop import run_turn
 from .runner import run_task
 from .schemas import StepError, parse_step
-from .tasks import load_tasks
+from .tasks import get_task, load_tasks
+
+# Ce qu'un bon agent fait pour cs-02 (2 tours)
+CS02 = [
+    {"action": "activate_skill", "skill": "return-request"},
+    {"action": "call_tool", "tool": "get_order", "arguments": {"order_id": "CMD-2026-0512"}},
+    {"action": "call_tool", "tool": "create_refund",          # tentative sans confirmation : refusée
+     "arguments": {"order_id": "CMD-2026-0512", "amount_tnd": 119.0, "reason": "taille", "approved_by": "A-03"}},
+    {"action": "answer", "text": "Decision: APPROVE\nAmount: 119.000 TND\nPlease confirm.\nSkill used: return-request"},
+    {"action": "call_tool", "tool": "create_refund",
+     "arguments": {"order_id": "CMD-2026-0512", "amount_tnd": 119.0, "reason": "taille", "approved_by": "A-03"}},
+    {"action": "answer", "text": "Refund saved.\nDecision: APPROVE\nSkill used: return-request"},
+]
 
 
 class SchemaTests(TestCase):
     def test_reponses_valides(self):
         self.assertEqual(parse_step('{"action": "answer", "text": "ok"}').text, "ok")
-        step = parse_step('{"action": "call_tool", "tool": "get_invoice", '
-                          '"arguments_json": "{\\"invoice_id\\": \\"INV-1\\"}"}')
-        self.assertEqual(step.arguments, {"invoice_id": "INV-1"})
+        step = parse_step('{"action": "call_tool", "tool": "get_order", '
+                          '"arguments_json": "{\\"order_id\\": \\"CMD-1\\"}"}')
+        self.assertEqual(step.arguments, {"order_id": "CMD-1"})
 
     def test_reponses_refusees(self):
         for raw in ["pas du json", '{"action": "tout_supprimer"}', '{"action": "answer"}',
@@ -36,42 +53,33 @@ class AgentTests(TestCase):
     def setUpTestData(cls):
         index_all()
 
-    def test_les_7_taches_reussissent_hors_ligne(self):
-        tasks = load_tasks()
-        self.assertEqual(len(tasks), 7)
-        for task in tasks:
-            with self.subTest(task=task.id):
-                run = run_task(task, client_kind="scripted")
-                self.assertTrue(run.passed, (run.checks, run.violations, run.error))
+    def test_les_requetes_sont_valides(self):
+        self.assertEqual(len(load_tasks()), 9)
 
-    def test_ecriture_bloquee_sans_confirmation(self):
-        client = ScriptedClient([
-            {"action": "activate_skill", "skill": "invoice-validation"},
-            {"action": "call_tool", "tool": "update_invoice_status",
-             "arguments": {"invoice_id": "INV-2026-00512", "new_status": "approved",
-                           "reason": "ok", "approver_id": "U-014"}},
-            {"action": "answer", "text": "Decision: HOLD\nSkill used: invoice-validation"},
-        ])
-        turn = run_turn([Event(kind="user", text="Approuve INV-2026-00512")], client)
-        self.assertEqual(turn.steps[1].guard, "confirmation_required")
-        self.assertEqual(turn.violations, [])
+    def test_ecriture_refusee_puis_acceptee(self):
+        run = run_task(get_task("cs-02"), client=ScriptedClient(CS02))
+        steps = run.turns[0]["steps"]
+        self.assertEqual(steps[2]["guard"], "confirmation_required")
+        self.assertEqual(run.turns[1]["steps"][0]["guard"], "ok")
+        self.assertTrue(run.passed, (run.checks, run.violations, run.error))
+        self.assertEqual(Refund.objects.filter(order__order_id="CMD-2026-0512").count(), 1)
+
+    def test_mesure_progressif_contre_monolithique(self):
+        run = run_task(get_task("cs-02"), client=ScriptedClient(CS02))
+        self.assertGreater(run.mono_tokens, run.prog_tokens)
+        first = run.turns[0]["steps"][0]
+        self.assertGreater(first["mono_tokens"], 3 * first["prog_tokens"])   # au démarrage
 
     def test_reponse_invalide_et_outil_sans_skill(self):
         client = ScriptedClient([
             "ceci n'est pas du JSON",
-            {"action": "call_tool", "tool": "get_invoice", "arguments": {"invoice_id": "X"}},
+            {"action": "call_tool", "tool": "get_order", "arguments": {"order_id": "X"}},
             {"action": "answer", "text": "Je ne sais pas."},
         ])
         turn = run_turn([Event(kind="user", text="Bonjour")], client)
         self.assertEqual([s.action for s in turn.steps], ["invalid", "call_tool", "answer"])
         self.assertEqual(turn.steps[1].guard, "skill_not_active")
         self.assertEqual(len(turn.violations), 1)     # pas de ligne « Skill used: »
-
-    @override_settings(GEMINI_API_KEY="")
-    def test_client_auto_sans_cle_utilise_le_plan_b(self):
-        self.assertEqual(make_client("auto", "fin-01").name, "scripted")
-        with self.assertRaises(LLMError):
-            make_client("gemini")
 
 
 class GeminiTests(TestCase):
@@ -82,11 +90,24 @@ class GeminiTests(TestCase):
         class FakeModels:
             def generate_content(self, model, contents, config):
                 sent.append(config)
-                return SimpleNamespace(text='{"action": "answer", "text": "prêt"}')
+                usage = SimpleNamespace(prompt_token_count=120, candidates_token_count=9,
+                                        thoughts_token_count=None)
+                return SimpleNamespace(text='{"action": "answer", "text": "prêt"}', usage_metadata=usage)
+
+            def count_tokens(self, model, contents):
+                return SimpleNamespace(total_tokens=42)
 
         client = GeminiClient(client=SimpleNamespace(models=FakeModels()))
-        self.assertEqual(parse_step(client.next_step("contexte")).text, "prêt")
+        reply = client.next_step("contexte")
+        self.assertEqual(parse_step(reply.text).text, "prêt")
+        self.assertEqual(reply.usage, {"input": 120, "output": 9, "thinking": 0})
+        self.assertEqual(client.count_tokens("contexte"), 42)
         self.assertEqual(sent[0].response_mime_type, "application/json")
+
+    @override_settings(GEMINI_API_KEY="")
+    def test_sans_cle(self):
+        with self.assertRaises(LLMError):
+            GeminiClient()
 
 
 class ApiTests(TestCase):
@@ -98,17 +119,26 @@ class ApiTests(TestCase):
         return self.client.post(url, json.dumps(data), content_type="application/json")
 
     def test_api(self):
-        self.assertEqual(len(self.client.get("/api/skills/").json()["skills"]), 12)
+        self.assertEqual(len(self.client.get("/api/skills/").json()["skills"]), 6)
+        self.assertEqual(len(self.client.get("/api/tasks/").json()["tasks"]), 9)
+        self.assertEqual(len(self.client.get("/api/tools/").json()["tools"]), 8)
         self.assertGreater(self.post("/api/tokens/", {"text": "Bonjour tout le monde"}).json()["tokens"], 2)
         result = self.post("/api/compile/", {"events": [
-            {"kind": "user", "text": "Bonjour"},
-            {"kind": "activate_skill", "skill": "vendor-check"}]}).json()
-        self.assertEqual(result["active_skills"], ["vendor-check"])
+            {"kind": "user", "text": "Bonjour"}, {"kind": "activate_skill", "skill": "order-tracking"}]}).json()
+        self.assertEqual(result["active_skills"], ["order-tracking"])
         self.assertEqual(self.post("/api/compile/", {"mode": "autre"}).status_code, 400)
-        self.assertTrue(self.post("/api/run/", {"task_id": "fin-05", "client": "scripted"}).json()["passed"])
-        self.assertEqual(self.client.get("/api/runs/").status_code, 200)
-        self.assertContains(self.client.get("/dashboard/"), "fin-05")
+        self.assertEqual(self.post("/api/run/", {"task_id": "cs-01", "mode": "autre"}).status_code, 400)
+        self.assertEqual(self.client.get("/api/runs/").json()["stats"]["runs"], 0)
+        self.assertEqual(self.client.get("/").status_code, 200)
+
+    def test_service_outils(self):
+        from erp.seed import seed_demo
+        seed_demo()
+        ok = self.post("/api/tools/get_order/", {"arguments": {"order_id": "CMD-2026-0457"}})
+        self.assertIn("349", ok.json()["output"])
+        self.assertEqual(self.post("/api/tools/create_refund/", {"arguments": {}}).status_code, 403)
+        self.assertEqual(self.post("/api/tools/get_order/", {"arguments": {}}).status_code, 400)
 
     @override_settings(GEMINI_API_KEY="")
-    def test_message_libre_sans_cle(self):
-        self.assertEqual(self.post("/api/run/", {"message": "Bonjour"}).status_code, 503)
+    def test_run_sans_cle(self):
+        self.assertEqual(self.post("/api/run/", {"task_id": "cs-01"}).status_code, 503)

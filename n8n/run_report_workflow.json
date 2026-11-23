@@ -1,0 +1,32 @@
+{
+  "name": "Webhook : Django prévient n8n à la fin de chaque exécution",
+  "nodes": [
+    {
+      "parameters": { "httpMethod": "POST", "path": "copilot-run", "responseMode": "onReceived", "options": {} },
+      "name": "Webhook fin d'exécution",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "copilot-run"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "1", "name": "message", "type": "string",
+              "value": "={{ 'Exécution ' + $json.body.task_id + ' (' + $json.body.mode + ') : ' + $json.body.prog_tokens + ' tokens avec le compilateur contre ' + $json.body.mono_tokens + ' sans, soit ' + $json.body.saving_pct + ' % d economie. Résultat : ' + ($json.body.passed ? 'réussi' : 'échec') }}" }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Résumé lisible",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [260, 0]
+    }
+  ],
+  "connections": {
+    "Webhook fin d'exécution": { "main": [[{ "node": "Résumé lisible", "type": "main", "index": 0 }]] }
+  },
+  "settings": {}
+}

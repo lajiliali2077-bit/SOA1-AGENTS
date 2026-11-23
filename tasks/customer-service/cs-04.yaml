@@ -1,0 +1,13 @@
+id: cs-04
+department: customer-service
+title: "Colis en retard de 5 jours"
+expected_skill: order-tracking
+trap: none
+overridden_rule: none
+turns:
+  - user: "Où en est la commande CMD-2026-0601 ? La cliente ne l'a toujours pas reçue."
+checks:
+  - {check: skill_activated, skill: order-tracking}
+  - {check: tool_called, tool: track_shipment}
+  - {check: text_contains, value: "Rapid-Poste"}
+  - {check: text_matches, pattern: '\b5\b'}

@@ -21,6 +21,8 @@ from django.conf import settings
 from django.db import transaction
 from pydantic import BaseModel, Field
 
+from erp.tools import TOOLS
+
 from .models import AgentsFile, Skill, Tool
 
 ENCODING = tiktoken.get_encoding("o200k_base")
@@ -70,6 +72,8 @@ def read_tools() -> dict:
             tool = ToolDefinition.model_validate(item)      # erreur si le format est faux
             if tool.name in tools:
                 raise ValueError(f"outil '{tool.name}' défini deux fois")
+            if tool.name not in TOOLS:
+                raise ValueError(f"outil '{tool.name}' sans fonction Python dans erp/tools.py")
             tools[tool.name] = (tool, path.stem)
     return tools
 

@@ -12,6 +12,7 @@ Puis on respecte le budget de tokens :
 Mode "monolithic" (pour comparer) : on envoie tout, tout le temps, sans budget.
 """
 
+import json
 from dataclasses import dataclass, field
 
 from django.conf import settings
@@ -89,8 +90,17 @@ def allowed_tools(skills: list) -> list:
     return names
 
 
+def tools_block(names: list) -> Block:
+    """Définitions des outils autorisés, envoyées à l'IA pour qu'elle sache comment les appeler."""
+    lines = ["Outils autorisés (action call_tool, arguments_json = objet JSON des paramètres) :"]
+    for tool in Tool.objects.filter(name__in=names):
+        lines.append(json.dumps({"name": tool.name, "mode": tool.mode, "description": tool.description,
+                                 "parameters": tool.parameters}, ensure_ascii=False))
+    return Block("tools", "\n".join(lines), source="tools")
+
+
 def tool_tokens(names: list) -> int:
-    return sum(Tool.objects.filter(name__in=names).values_list("tokens", flat=True))
+    return tools_block(names).tokens if names else 0
 
 
 def conversation_block(event: Event) -> Block:
@@ -128,13 +138,21 @@ def remove_skill(blocks: list, skill: Skill) -> list:
             and not (b.kind == "reference" and b.source.startswith(skill.name + "/"))]
 
 
+CONVERSATION = ("user", "assistant", "observation", "masked")
+
+
 def make_result(blocks, budget, skills, tools, evictions) -> CompileResult:
-    tokens_of_tools = tool_tokens(tools)
+    """Ordre du texte envoyé : règles et skills, puis outils autorisés, puis la conversation."""
+    rules = [b for b in blocks if b.kind not in CONVERSATION]
+    conversation = [b for b in blocks if b.kind in CONVERSATION]
+    if tools:
+        rules.append(tools_block(tools))
+    blocks = rules + conversation
     return CompileResult(
         text="\n\n".join(b.text for b in blocks),
-        tokens=sum(b.tokens for b in blocks) + tokens_of_tools,
+        tokens=sum(b.tokens for b in blocks),
         budget=budget, blocks=blocks, active_skills=[s.name for s in skills],
-        allowed_tools=tools, tool_tokens=tokens_of_tools, evictions=evictions)
+        allowed_tools=tools, tool_tokens=tool_tokens(tools), evictions=evictions)
 
 
 # ----- Le compilateur -----
@@ -209,10 +227,15 @@ def compile_context(events: list, budget: int = 6000, mode: str = "progressive")
 
 
 def compile_monolithic(events: list, budget: int) -> CompileResult:
-    """Tout est chargé : tous les AGENTS.md, tous les skills, tous les outils. Aucune éviction."""
+    """Tout est chargé : tous les AGENTS.md, tous les skills et leurs références, tous les outils.
+    Aucune éviction, aucun masquage."""
     blocks = [Block("agents", a.content, a.path) for a in AgentsFile.objects.all()]
     skills = list(Skill.objects.all())
-    blocks += [Block("skill", f"Skill : {s.name}\n\n{s.body}", s.name) for s in skills]
+    for s in skills:
+        blocks.append(Block("skill", f"Skill : {s.name}\n\n{s.body}", s.name))
+        folder = settings.BASE_DIR / s.path.replace("SKILL.md", "references")
+        for path in sorted(folder.glob("*.md")):
+            blocks.append(reference_block(s, path.name))
     for event in events:
         if event.kind in ("user", "assistant", "observation"):
             blocks.append(conversation_block(event))

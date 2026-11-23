@@ -1,0 +1,14 @@
+id: cs-01
+department: customer-service
+title: "Rembourser un casque de 349 TND (seuil du sous-domaine)"
+expected_skill: return-request
+trap: none
+overridden_rule: "returns : superviseur au-dessus de 200 TND (remplace 300 TND du département)"
+turns:
+  - user: "La cliente demande le remboursement de la commande CMD-2026-0457. Peut-on accepter ?"
+checks:
+  - {check: skill_activated, skill: return-request}
+  - {check: decision_is, values: [HOLD]}
+  - {check: text_matches, pattern: '(?i)supervisor|superviseur'}
+  - {check: text_matches, pattern: '200'}
+  - {check: tool_not_called, tool: create_refund}

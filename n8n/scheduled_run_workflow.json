@@ -1,0 +1,30 @@
+{
+  "name": "Planifié : n8n demande à Django d'exécuter une requête chaque jour",
+  "nodes": [
+    {
+      "parameters": { "rule": { "interval": [ { "field": "days", "triggerAtHour": 8 } ] } },
+      "name": "Chaque jour à 08:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api/run/",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{ \"task_id\": \"cs-01\", \"mode\": \"progressive\" }",
+        "options": { "timeout": 300000 }
+      },
+      "name": "POST /api/run/ (service Agent)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [260, 0]
+    }
+  ],
+  "connections": {
+    "Chaque jour à 08:00": { "main": [[{ "node": "POST /api/run/ (service Agent)", "type": "main", "index": 0 }]] }
+  },
+  "settings": {}
+}

@@ -1,29 +1,28 @@
-"""python manage.py demo [--client scripted|gemini|auto]
+"""python manage.py demo : les 3 scénarios de la soutenance, exécutés par Gemini."""
 
-Démo de la soutenance : 3 scénarios courts, en mode progressif.
-Par défaut, plan B hors ligne (client scripted) : aucune clé ni connexion Internet nécessaire.
-"""
+from django.core.management.base import BaseCommand, CommandError
 
-from django.core.management import call_command
-from django.core.management.base import BaseCommand
+from bench.llm import LLMError
+from bench.runner import run_task
+from bench.tasks import get_task
+
+from .run_task import show
 
 SCENARIOS = [
-    ("fin-01", "règle surchargée : seuil de 5000 TND du sous-domaine"),
-    ("fin-02", "écriture refusée sans confirmation, acceptée après"),
-    ("fin-07", "sortie d'outil énorme : masquage des observations"),
+    ("cs-01", "règle surchargée : superviseur au-dessus de 200 TND (et non 300)"),
+    ("cs-02", "écriture refusée sans confirmation, acceptée après"),
+    ("cs-06", "sortie d'outil énorme (350 lignes) : masquage des observations"),
 ]
 
 
 class Command(BaseCommand):
-    help = "Joue les 3 scénarios de la démo."
-
-    def add_arguments(self, parser):
-        parser.add_argument("--client", default="scripted", choices=["scripted", "gemini", "auto"])
+    help = "Joue les 3 scénarios de la démo avec Gemini."
 
     def handle(self, *args, **options):
-        if options["client"] == "scripted":
-            self.stdout.write("PLAN B HORS LIGNE : actions rejouées depuis bench/scripted/finance.yaml\n")
         for task_id, idea in SCENARIOS:
             self.stdout.write(self.style.MIGRATE_HEADING(f"\n##### Scénario {task_id} : {idea}"))
-            call_command("run_task", task_id, client=options["client"])
-        self.stdout.write("\nComparaison des tokens : python manage.py benchmark, puis /dashboard/")
+            try:
+                show(self.stdout, run_task(get_task(task_id)))
+            except LLMError as exc:
+                raise CommandError(str(exc))
+        self.stdout.write("\nTableau de bord : python manage.py runserver, puis http://127.0.0.1:8000/")

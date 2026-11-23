@@ -1,0 +1,14 @@
+id: cs-06
+department: customer-service
+title: "Article manquant dans une commande de 350 lignes (masquage)"
+expected_skill: return-request
+trap: large_output
+overridden_rule: none
+turns:
+  - user: "L'école C-1050 signale un article manquant (ligne 212) dans la commande CMD-2026-0733. Que fait-on ?"
+checks:
+  - {check: skill_activated, skill: return-request}
+  - {check: text_contains, value: "212"}
+  - {check: text_matches, pattern: '45[.,]000'}
+  - {check: context_compacted, value: true}
+  - {check: tool_not_called, tool: create_refund}

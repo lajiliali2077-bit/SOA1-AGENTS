@@ -1,0 +1,58 @@
+# Outils du département Service client. Chaque outil est une vraie fonction de erp/tools.py.
+# mode : read (lecture seule) ou write (modifie la base : confirmation de l'utilisateur obligatoire)
+# departments : départements autorisés à utiliser l'outil
+
+- name: get_order
+  description: "Get one order: customer, dates, status, number of days since delivery, total in TND, the free note written by the customer, and every line (product, category, quantity, unit price)."
+  mode: read
+  departments: [customer-service]
+  parameters:
+    - {name: order_id, type: string, required: true, description: "Order identifier, for example CMD-2026-0457."}
+    - {name: line, type: integer, required: false, description: "Return only this line number (short answer). Use it for a big order or when an earlier output was masked."}
+
+- name: track_shipment
+  description: "Get the delivery tracking of one order: carrier, tracking number, expected delivery date, number of days late and the tracking events."
+  mode: read
+  departments: [customer-service]
+  parameters:
+    - {name: order_id, type: string, required: true, description: "Order identifier."}
+
+- name: get_customer
+  description: "Get a customer record: name, city, loyalty tier (standard or gold), masked email and phone, number of orders and number of refunds."
+  mode: read
+  departments: [customer-service]
+  parameters:
+    - {name: customer_id, type: string, required: true, description: "Customer identifier, for example C-1001."}
+
+- name: search_orders
+  description: "List the orders of one customer, most recent first, with date, status, total in TND and whether the order was refunded."
+  mode: read
+  departments: [customer-service]
+  parameters:
+    - {name: customer_id, type: string, required: true, description: "Customer identifier."}
+    - {name: status, type: string, required: false, enum: [processing, shipped, delivered], description: "Only the orders with this status."}
+    - {name: limit, type: integer, required: false, description: "Maximum number of orders returned, default 20."}
+
+- name: get_product
+  description: "Get one product of the catalogue: name, category (electronics, accessories or clothing) and manufacturer warranty in months."
+  mode: read
+  departments: [customer-service]
+  parameters:
+    - {name: sku, type: string, required: true, description: "Product code, for example SKU-HP-01."}
+
+- name: get_refunds
+  description: "List the refunds already made for one order, with amount, reason, approver and date, and the total already refunded."
+  mode: read
+  departments: [customer-service]
+  parameters:
+    - {name: order_id, type: string, required: true, description: "Order identifier."}
+
+- name: create_refund
+  description: "Record a refund for an order. The refund is saved in the database and the money is sent back to the customer. It can never exceed the amount paid."
+  mode: write
+  departments: [customer-service]
+  parameters:
+    - {name: order_id, type: string, required: true, description: "Order identifier."}
+    - {name: amount_tnd, type: number, required: true, description: "Amount to refund in TND."}
+    - {name: reason, type: string, required: true, description: "Short reason kept with the refund."}
+    - {name: approved_by, type: string, required: true, description: "Identifier of the agent or supervisor who approves, given by the user, for example A-03 or S-07."}
