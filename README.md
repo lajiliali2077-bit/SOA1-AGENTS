@@ -40,7 +40,7 @@ Il est écrit pour être compris **sans connaître l'IA ni Django**.
 15. [Questions que le jury peut poser](#15-questions-que-le-jury-peut-poser)
 16. [Exercices pour bien comprendre](#16-exercices-pour-bien-comprendre)
 
-Documents complémentaires : [docs/SKILLS.md](docs/SKILLS.md) (les skills expliqués en détail), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (services, diagrammes, mesure), [docs/DEMO.md](docs/DEMO.md) (script de démo), [docs/BENCHMARK.md](docs/BENCHMARK.md) (chiffres), [docs/PRESENTATION.md](docs/PRESENTATION.md) (plan des diapositives), [docs/COMPARAISON.md](docs/COMPARAISON.md) (matrices et sources).
+Documents complémentaires : [docs/SKILLS.md](docs/SKILLS.md) (les skills expliqués en détail), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (services, diagrammes, mesure), [docs/DEMO.md](docs/DEMO.md) (script de démo), [docs/BENCHMARK.md](docs/BENCHMARK.md) (chiffres), [docs/PRESENTATION.md](docs/PRESENTATION.md) (plan des diapositives), [docs/DIAGRAMMES.md](docs/DIAGRAMMES.md) (tous les schémas, code à copier dans mermaid.live), [docs/COMPARAISON.md](docs/COMPARAISON.md) (matrices et sources).
 
 ---
 
@@ -125,7 +125,7 @@ flowchart LR
     SYNC --> REG[Service Registre] --> DB
 ```
 
-Diagrammes de séquence détaillés : [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Diagrammes de séquence détaillés : [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Tous les schémas, prêts à copier dans https://mermaid.live pour obtenir une image : [docs/DIAGRAMMES.md](docs/DIAGRAMMES.md).
 
 ---
 

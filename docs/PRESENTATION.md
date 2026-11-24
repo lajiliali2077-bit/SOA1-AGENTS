@@ -75,7 +75,7 @@ Chaque membre doit pourtant savoir expliquer **le compilateur**, **la garde** et
 
 ### Diapositive 8 : Le schéma d'architecture
 - Interface web et n8n → service Agent → Compilateur, Gemini, Moteur → Outils → PostgreSQL ; GitHub → Synchronisation → Registre.
-- **Visuel** : le diagramme du README §3.2, exporté depuis https://mermaid.live (*Actions > PNG*) ou redessiné dans draw.io.
+- **Visuel** : diagramme n°1 de [DIAGRAMMES.md](DIAGRAMMES.md), copié dans https://mermaid.live puis *Actions > PNG* (ou redessiné dans draw.io).
 - **À dire** : suivre une flèche du début à la fin, une seule fois.
 - **Source** : README §3.2, docs/ARCHITECTURE.md §4
 
@@ -223,8 +223,7 @@ Chaque membre doit pourtant savoir expliquer **le compilateur**, **la garde** et
 
 | Visuel | Comment l'obtenir | Diapositives |
 |---|---|---|
-| Schéma d'architecture | copier le bloc mermaid du README §3.2 dans https://mermaid.live, *Actions > PNG* (ou le redessiner dans draw.io) | 1, 8 |
-| Diagramme de séquence | même méthode avec docs/ARCHITECTURE.md §5 | 10 |
+| **Tous les schémas** (architecture, 3 niveaux, AGENTS.md, boucle de l'agent, séquences, budget, mesure, n8n, données, déploiement) | copier le code de [DIAGRAMMES.md](DIAGRAMMES.md) dans https://mermaid.live, puis *Actions > PNG* ; le tableau en haut de ce fichier indique quel diagramme va sur quelle diapositive | 1, 8, 10, 11, 14, 15, 17, 18, 22, 24 |
 | Page DRF de `/api/tools/` | capture du navigateur | 9 |
 | Workflow n8n | capture après import de `n8n/scheduled_run_workflow.json` | 10 |
 | Début de `return-request/SKILL.md` | capture de VS Code | 12 |
