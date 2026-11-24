@@ -280,7 +280,7 @@ Page **http://127.0.0.1:8000/** (un seul fichier : `bench/templates/bench/app.ht
 
 **Onglet « Tableau de bord »**
 - tuiles : nombre d'exécutions, tokens avec et sans compilateur, **économie totale en %**, taille au démarrage ;
-- graphique : pour chaque exécution récente, une barre bleue (avec compilateur) et une barre orange (sans) ; survoler pour le détail, **cliquer pour ouvrir l'exécution** ;
+- graphique : pour chaque exécution récente, une barre bleu marine (avec compilateur) et une barre dorée (sans) ; survoler pour le détail, **cliquer pour ouvrir l'exécution** ;
 - tableau des exécutions récentes avec les tokens **réellement facturés** par Gemini et la durée.
 
 Toutes les données viennent de l'API REST (`/api/tasks/`, `/api/run/`, `/api/runs/`, `/api/runs/<id>/`).

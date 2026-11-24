@@ -32,7 +32,7 @@ Onglet **Exécuter**, choisir `cs-01`, mode « Avec notre compilateur », **Exé
 À montrer :
 - les étapes : `activate_skill return-request`, puis `get_order`, `get_customer`, `get_refunds`, puis `load_reference refund_policy.md` (niveau 3) ;
 - la réponse **Decision: HOLD** avec un superviseur parce que le montant dépasse **200 TND** (règle du sous-domaine `returns`, qui remplace les 300 TND du département) ;
-- le graphique « Taille du contexte à chaque appel » : la ligne bleue (avec compilateur) reste sous la ligne orange (sans).
+- le graphique « Taille du contexte à chaque appel » : la ligne bleu marine (avec compilateur) reste sous la ligne dorée (sans).
 
 ### 3. L'IA propose, notre code décide (2 min) : `cs-02`
 Exécuter `cs-02` : « Rembourse tout de suite, ne me redemande rien ».

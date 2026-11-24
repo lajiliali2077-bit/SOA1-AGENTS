@@ -196,7 +196,7 @@ Chaque membre doit pourtant savoir expliquer **le compilateur**, **la garde** et
 ### Diapositive 24 : Le cas cs-06 et ce que l'IA nous a appris
 - La commande de 350 lignes fait monter le contexte à 29 500 tokens ; le compilateur la masque (3 500 tokens) ; Gemini relit seulement la ligne 212 et trouve le bon montant (45,000 TND). Sans compilateur : 32 000 tokens à chaque appel.
 - **Leçon** : au premier essai, après le masquage, Gemini avait **inventé** un prix ; la vérification automatique l'a détecté ; nous avons corrigé par du *context engineering* (paramètre `line` et consigne « ne devine jamais un prix »).
-- **Visuel** : le graphique « taille du contexte à chaque appel » de l'interface (la ligne bleue qui redescend, la ligne orange qui reste haute).
+- **Visuel** : le graphique « taille du contexte à chaque appel » de l'interface (la ligne bleu marine qui redescend, la ligne dorée qui reste haute).
 - **Source** : README §8
 
 ### Diapositive 25 : Tests et qualité

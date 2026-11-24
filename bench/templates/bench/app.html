@@ -13,37 +13,43 @@
     GET  /api/runs/<id>/    détail d'une exécution
 -->
 <style>
+  /* Thème bleu marine et or (tons ivoire et ardoise) */
   :root {
     color-scheme: light;
-    --surface-0: #f4f4f2; --surface-1: #fcfcfb; --border: #e2e1dc;
-    --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #7a7974;
-    --prog: #2a78d6;   /* progressif (notre compilateur) : bleu, emplacement 1 */
-    --mono: #eb6834;   /* monolithique (sans compilateur) : orange, emplacement 2 */
-    --good: #1a7f37; --bad: #c62828; --warn: #9a6700;
+    --surface-0: #f6f3ea; --surface-1: #fffdf8; --border: #e3dcc8;
+    --text-primary: #0f1d3a; --text-secondary: #46506b; --text-muted: #7c8296;
+    --navy: #0f1d3a; --navy-2: #1c3166; --gold: #c9a227; --gold-soft: #f3e7bf; --ivory: #fbf7ea;
+    --prog: #1f3d7a;   /* progressif (notre compilateur) : bleu marine */
+    --mono: #c9a227;   /* monolithique (sans compilateur) : or */
+    --good: #1f7a4d; --bad: #b3261e; --warn: #9a6a00;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       color-scheme: dark;
-      --surface-0: #121211; --surface-1: #1a1a19; --border: #33332f;
-      --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
-      --prog: #3987e5; --mono: #d95926;
-      --good: #4cc26a; --bad: #ef6b6b; --warn: #d9a520;
+      --surface-0: #0a1222; --surface-1: #101b33; --border: #24345a;
+      --text-primary: #f3ecd8; --text-secondary: #c9c2a9; --text-muted: #8d93a6;
+      --navy: #08101f; --navy-2: #1c3166; --gold: #d9b44a; --gold-soft: #3a3420; --ivory: #f3ecd8;
+      --prog: #6f93dc; --mono: #d9b44a;
+      --good: #4cc286; --bad: #ef6b6b; --warn: #e0b23c;
     }
   }
   * { box-sizing: border-box; }
   body { margin: 0; font: 15px/1.5 system-ui, "Segoe UI", Arial, sans-serif;
          background: var(--surface-0); color: var(--text-primary); }
-  header { padding: 18px 28px; border-bottom: 1px solid var(--border); background: var(--surface-1);
+  header { padding: 18px 28px; border-bottom: 3px solid var(--gold); background: var(--navy);
            display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
-  header h1 { font-size: 19px; margin: 0; }
-  header p { margin: 0; color: var(--text-secondary); font-size: 13px; }
+  header h1 { font-size: 19px; margin: 0; color: var(--gold); letter-spacing: .3px; }
+  header p { margin: 0; color: var(--ivory); opacity: .8; font-size: 13px; }
   nav { margin-left: auto; display: flex; gap: 6px; }
-  nav button { border: 1px solid var(--border); background: var(--surface-0); color: var(--text-primary);
+  nav button { border: 1px solid var(--gold); background: transparent; color: var(--ivory);
                padding: 7px 16px; border-radius: 8px; cursor: pointer; font: inherit; }
-  nav button.on { background: var(--text-primary); color: var(--surface-1); }
+  nav button:hover { background: var(--navy-2); }
+  nav button.on { background: var(--gold); color: var(--navy); font-weight: 600; }
   main { max-width: 1240px; margin: 0 auto; padding: 24px 28px 60px; }
   .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; }
-  h2 { font-size: 16px; margin: 0 0 12px; }
+  h2 { font-size: 16px; margin: 0 0 12px; color: var(--navy-2); }
+  @media (prefers-color-scheme: dark) { h2 { color: var(--gold); } }
+  .kpi { border-top: 3px solid var(--gold); }
   h3 { font-size: 14px; margin: 18px 0 8px; color: var(--text-secondary); }
   .muted { color: var(--text-muted); font-size: 13px; }
   .grid2 { display: grid; grid-template-columns: 380px 1fr; gap: 20px; align-items: start; }
@@ -52,15 +58,16 @@
   /* Liste des requêtes prédéfinies */
   .task { display: block; width: 100%; text-align: left; border: 1px solid var(--border); background: var(--surface-0);
           color: var(--text-primary); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; cursor: pointer; font: inherit; }
-  .task:hover { border-color: var(--text-muted); }
-  .task.on { border: 2px solid var(--prog); padding: 9px 11px; }
+  .task:hover { border-color: var(--gold); }
+  .task.on { border: 2px solid var(--gold); padding: 9px 11px; background: var(--gold-soft); }
   .task b { font-size: 13px; }
   .task .q { display: block; color: var(--text-secondary); font-size: 13px; margin-top: 2px; }
   .tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 10px; border: 1px solid var(--border);
          color: var(--text-secondary); margin-left: 4px; }
   .controls { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin: 12px 0 4px; }
-  .run-btn { background: var(--prog); color: #fff; border: 0; border-radius: 8px; padding: 9px 20px;
-             font: inherit; font-weight: 600; cursor: pointer; }
+  .run-btn { background: var(--navy-2); color: var(--ivory); border: 2px solid var(--gold); border-radius: 8px;
+             padding: 9px 20px; font: inherit; font-weight: 600; cursor: pointer; }
+  .run-btn:hover:not(:disabled) { background: var(--gold); color: var(--navy); }
   .run-btn:disabled { opacity: .5; cursor: wait; }
 
   /* Tableaux */
@@ -90,7 +97,7 @@
   .tooltip { position: fixed; pointer-events: none; background: var(--surface-1); border: 1px solid var(--border);
              border-radius: 8px; padding: 8px 10px; font-size: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.12);
              display: none; z-index: 10; max-width: 300px; }
-  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--prog);
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--gold);
              border-radius: 50%; animation: spin 1s linear infinite; vertical-align: -2px; margin-right: 6px; }
   @keyframes spin { to { transform: rotate(360deg); } }
   .hidden { display: none; }
