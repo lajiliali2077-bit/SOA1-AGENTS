@@ -1,6 +1,6 @@
 ---
 name: return-request
-description: Decide whether a return or refund request can be accepted, by checking the order, the return window, the refunds already made and the approval threshold. Use when the user asks to accept, check or refund a return, a missing item or a damaged item.
+description: ceci est un testDecide whether a return or refund request can be accepted, by checking the order, the return window, the refunds already made and the approval threshold. Use when the user asks to accept, check or refund a return, a missing item or a damaged item.
 allowed-tools: get_order get_customer get_refunds calculate create_refund
 ---
 
@@ -44,5 +44,3 @@ The order is a Bluetooth headset (electronics) of 349.000 TND delivered 4 days a
 - Partial return: refund only the returned lines, never the delivery.
 
 
-## Test
-- ceci est un test
