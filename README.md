@@ -488,7 +488,9 @@ Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/api/sync/github/ -Body
 ```
 Résultat attendu : `status : ok`. Avec `"X-Hub-Signature-256"="sha256=faux"` : **erreur 403**.
 
-**Brancher n8n** : `docker compose up -d n8n`, ouvrir http://localhost:5678, importer les fichiers du dossier `n8n/`, activer les workflows. Pour le webhook sortant, mettre `N8N_RUN_WEBHOOK_URL=http://localhost:5678/webhook/copilot-run` dans `.env`.
+**Brancher n8n** : `docker compose up -d n8n`, ouvrir http://localhost:5678, importer les fichiers du dossier `n8n/`, activer les workflows. Pour le webhook sortant, mettre `N8N_RUN_WEBHOOK_URL=http://localhost:5678/webhook/copilot-run` dans `.env`. Remplir aussi `N8N_SYNC_TOKEN` dans `.env` **avant** `docker compose up -d n8n` (sinon recréer le conteneur). Lancer Django avec `python manage.py runserver 0.0.0.0:8000` : sur `127.0.0.1`, le conteneur n8n ne peut pas le joindre via `host.docker.internal`.
+
+**Webhook GitHub réel (via n8n)** : `docker compose --profile github up -d` démarre un proxy nginx (`n8n/webhook-proxy.conf`) et un tunnel Cloudflare. Lire l'adresse publique avec `docker logs copilot-tunnel` (ligne `https://….trycloudflare.com`). Seul `POST /webhook/github-sync` est exposé ; l'interface n8n renvoie 404. Sur GitHub : *Settings → Webhooks → Add webhook*, Payload URL `https://….trycloudflare.com/webhook/github-sync`, Content type `application/json`, Secret = la valeur de `GITHUB_WEBHOOK_SECRET` dans `.env`, événement *Just the push event*. n8n relaie le corps brut et la signature à Django, qui vérifie le HMAC (403 si la signature est fausse ou absente) en plus du jeton `N8N_SYNC_TOKEN`. L'adresse change à chaque redémarrage du tunnel : il faut alors la mettre à jour sur GitHub.
 
 ---
 

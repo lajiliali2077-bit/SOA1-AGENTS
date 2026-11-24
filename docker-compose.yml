@@ -31,6 +31,26 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
+  # Facultatif : webhook GitHub réel. « docker compose --profile github up -d »,
+  # puis lire l'adresse publique avec « docker logs copilot-tunnel ».
+  # Seul POST /webhook/github-sync est exposé ; l'interface n8n reste privée.
+  webhook-proxy:
+    image: nginx:alpine
+    container_name: copilot-webhook-proxy
+    profiles: ["github"]
+    volumes:
+      - ./n8n/webhook-proxy.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - n8n
+
+  tunnel:
+    image: cloudflare/cloudflared
+    container_name: copilot-tunnel
+    profiles: ["github"]
+    command: tunnel --no-autoupdate --url http://webhook-proxy:80
+    depends_on:
+      - webhook-proxy
+
 volumes:
   pgdata:
   n8ndata:

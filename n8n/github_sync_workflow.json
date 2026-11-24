@@ -5,8 +5,8 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "github-sync",
-        "responseMode": "onReceived",
-        "options": {}
+        "responseMode": "responseNode",
+        "options": { "rawBody": true }
       },
       "name": "Webhook GitHub",
       "type": "n8n-nodes-base.webhook",
@@ -21,23 +21,43 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "X-Sync-Token", "value": "={{ $env.N8N_SYNC_TOKEN }}" }
+            { "name": "X-Sync-Token", "value": "={{ $env.N8N_SYNC_TOKEN }}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "X-Hub-Signature-256", "value": "={{ $json.headers['x-hub-signature-256'] || '' }}" },
+            { "name": "X-GitHub-Event", "value": "={{ $json.headers['x-github-event'] || '' }}" },
+            { "name": "X-GitHub-Delivery", "value": "={{ $json.headers['x-github-delivery'] || '' }}" }
           ]
         },
         "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ ref: $json.body.ref, commit: $json.body.after, delivery_id: $json.headers['x-github-delivery'] }) }}",
-        "options": {}
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {
+          "response": { "response": { "fullResponse": true, "neverError": true } }
+        }
       },
-      "name": "Appeler Django",
+      "name": "Relayer le corps brut à Django (signature vérifiée par Django)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [260, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json.body) }}",
+        "options": { "responseCode": "={{ $json.statusCode }}" }
+      },
+      "name": "Répondre à GitHub avec le statut de Django",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [520, 0]
     }
   ],
   "connections": {
     "Webhook GitHub": {
-      "main": [[{ "node": "Appeler Django", "type": "main", "index": 0 }]]
+      "main": [[{ "node": "Relayer le corps brut à Django (signature vérifiée par Django)", "type": "main", "index": 0 }]]
+    },
+    "Relayer le corps brut à Django (signature vérifiée par Django)": {
+      "main": [[{ "node": "Répondre à GitHub avec le statut de Django", "type": "main", "index": 0 }]]
     }
   },
   "settings": {}

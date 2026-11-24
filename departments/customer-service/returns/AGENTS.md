@@ -20,3 +20,6 @@ Rules for return and refund skills. They override the department rules where the
 ## Decision format
 - Answer with one of APPROVE, REJECT or HOLD. Then give the amount, the window applied and the checks performed.
 - Call create_refund only after an explicit confirmation of the agent with an approver identifier.
+
+## Test
+- ceci est un test

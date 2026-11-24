@@ -40,11 +40,18 @@ class SyncTests(TestCase):
         self.assertEqual(self.github({"ref": "refs/heads/dev"}).status_code, 202)
         self.assertEqual(Skill.objects.count(), 0)
 
+    def n8n(self, token, signature=None, event="push"):
+        body = json.dumps({"ref": "refs/heads/main", "after": "def456"}).encode()
+        return self.client.post("/api/sync/n8n/", body, content_type="application/json",
+                                headers={"X-Sync-Token": token, "X-GitHub-Event": event,
+                                         "X-Hub-Signature-256": signature or sign(body)})
+
     def test_n8n(self):
-        body = json.dumps({"ref": "refs/heads/main", "commit": "def456"})
-        bad = self.client.post("/api/sync/n8n/", body, content_type="application/json",
-                               headers={"X-Sync-Token": "faux"})
-        self.assertEqual(bad.status_code, 403)
-        good = self.client.post("/api/sync/n8n/", body, content_type="application/json",
-                                headers={"X-Sync-Token": "jeton"})
+        self.assertEqual(self.n8n("faux").status_code, 403)                          # mauvais jeton
+        self.assertEqual(self.n8n("jeton", signature="sha256=faux").status_code, 403)  # fausse signature
+        self.assertEqual(SyncEvent.objects.count(), 0)
+        self.assertEqual(self.n8n("jeton", event="ping").json()["status"], "pong")
+        good = self.n8n("jeton")
+        self.assertEqual(good.status_code, 200)
         self.assertEqual(good.json()["source"], "n8n")
+        self.assertEqual(SyncEvent.objects.get().commit, "def456")
